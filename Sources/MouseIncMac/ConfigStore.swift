@@ -1,17 +1,49 @@
 import Foundation
 import MouseIncCore
 
+enum ConfigStoreError: LocalizedError {
+    case invalidConfiguration([ConfigurationIssue])
+
+    var errorDescription: String? {
+        switch self {
+        case let .invalidConfiguration(issues):
+            let details = issues
+                .filter { $0.severity == .error }
+                .prefix(3)
+                .map { "\($0.path): \($0.message)" }
+                .joined(separator: "\n")
+            return "配置校验失败：\n\(details)"
+        }
+    }
+}
+
 @MainActor
 struct ConfigStore {
     let fileURL: URL
     private let fileManager: FileManager
+    private let migrationObserver: @MainActor (Int, Int) -> Void
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
+        migrationObserver = { oldVersion, newVersion in
+            DiagnosticLogger.shared.log(
+                "Configuration migrated from schema \(oldVersion) to \(newVersion)"
+            )
+        }
         let baseURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         fileURL = baseURL
             .appendingPathComponent("MouseIncMac", isDirectory: true)
             .appendingPathComponent("config.json", isDirectory: false)
+    }
+
+    init(
+        fileURL: URL,
+        fileManager: FileManager = .default,
+        migrationObserver: @escaping @MainActor (Int, Int) -> Void = { _, _ in }
+    ) {
+        self.fileURL = fileURL
+        self.fileManager = fileManager
+        self.migrationObserver = migrationObserver
     }
 
     func loadOrCreate() throws -> AppConfiguration {
@@ -24,20 +56,19 @@ struct ConfigStore {
         let data = try Data(contentsOf: fileURL)
         let storedVersion = configurationVersion(in: data)
         let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+        try validate(configuration)
 
         if storedVersion != AppConfiguration.currentSchemaVersion {
             try preservePreMigrationConfiguration(data, schemaVersion: storedVersion ?? 1)
             try save(configuration)
-            DiagnosticLogger.shared.log(
-                "Configuration migrated from schema \(storedVersion ?? 1) " +
-                    "to \(AppConfiguration.currentSchemaVersion)"
-            )
+            migrationObserver(storedVersion ?? 1, AppConfiguration.currentSchemaVersion)
         }
 
         return configuration
     }
 
     func save(_ configuration: AppConfiguration) throws {
+        try validate(configuration)
         let directoryURL = fileURL.deletingLastPathComponent()
         try fileManager.createDirectory(
             at: directoryURL,
@@ -67,5 +98,12 @@ struct ConfigStore {
             .appendingPathComponent("config.schema-\(schemaVersion).backup.json")
         guard !fileManager.fileExists(atPath: backupURL.path) else { return }
         try data.write(to: backupURL, options: .atomic)
+    }
+
+    private func validate(_ configuration: AppConfiguration) throws {
+        let result = configuration.validate()
+        guard result.isValid else {
+            throw ConfigStoreError.invalidConfiguration(result.issues)
+        }
     }
 }

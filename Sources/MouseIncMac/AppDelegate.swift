@@ -8,14 +8,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
     private var permissionItem: NSMenuItem?
+    private var screenRecordingPermissionItem: NSMenuItem?
+    private var inputMonitoringPermissionItem: NSMenuItem?
     private var monitorItem: NSMenuItem?
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let permissions = PermissionCoordinator.snapshot
         DiagnosticLogger.shared.log(
-            "Application launched; accessibility=\(AccessibilityPermission.isGranted), " +
-            "postEvent=\(AccessibilityPermission.isPostEventGranted)"
+            event: .permissionSnapshot,
+            metadata: [
+                "accessibility": permissions[.accessibility].rawValue,
+                "screenRecording": permissions[.screenRecording].rawValue,
+                "inputMonitoring": permissions[.inputMonitoring].rawValue
+            ]
         )
         loadConfiguration()
         configureStatusItem()
@@ -89,6 +96,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionItem.target = self
         menu.addItem(permissionItem)
 
+        let screenRecordingPermissionItem = NSMenuItem(
+            title: "屏幕录制权限：未使用",
+            action: nil,
+            keyEquivalent: ""
+        )
+        screenRecordingPermissionItem.isEnabled = false
+        menu.addItem(screenRecordingPermissionItem)
+
+        let inputMonitoringPermissionItem = NSMenuItem(
+            title: "输入监控权限：未使用",
+            action: nil,
+            keyEquivalent: ""
+        )
+        inputMonitoringPermissionItem.isEnabled = false
+        menu.addItem(inputMonitoringPermissionItem)
+
         let monitorItem = NSMenuItem(title: "监听状态：未启动", action: nil, keyEquivalent: "")
         monitorItem.isEnabled = false
         menu.addItem(monitorItem)
@@ -136,6 +159,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.statusItem = statusItem
         self.enabledItem = enabledItem
         self.permissionItem = permissionItem
+        self.screenRecordingPermissionItem = screenRecordingPermissionItem
+        self.inputMonitoringPermissionItem = inputMonitoringPermissionItem
         self.monitorItem = monitorItem
         self.lastGestureItem = lastGestureItem
         updatePermissionMenus()
@@ -172,10 +197,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updatePermissionMenus() {
-        permissionItem?.title = AccessibilityPermission.isGranted
+        let permissions = PermissionCoordinator.snapshot
+        permissionItem?.title = permissions[.accessibility] == .granted
             ? "辅助功能权限：已授权"
             : "辅助功能权限：需要授权…"
+        screenRecordingPermissionItem?.title = permissionTitle(
+            name: "屏幕录制",
+            state: permissions[.screenRecording],
+            currentlyRequired: false
+        )
+        inputMonitoringPermissionItem?.title = permissionTitle(
+            name: "输入监控",
+            state: permissions[.inputMonitoring],
+            currentlyRequired: false
+        )
         monitorItem?.title = monitor?.isRunning == true ? "监听状态：已启动" : "监听状态：未启动"
+    }
+
+    private func permissionTitle(
+        name: String,
+        state: PermissionState,
+        currentlyRequired: Bool
+    ) -> String {
+        if !currentlyRequired, state != .granted {
+            return "\(name)权限：当前功能未使用"
+        }
+        switch state {
+        case .granted:
+            return "\(name)权限：已授权"
+        case .denied:
+            return "\(name)权限：未授权"
+        case .notDetermined:
+            return "\(name)权限：未请求"
+        case .unavailable:
+            return "\(name)权限：不可用"
+        }
     }
 
     @objc private func toggleEnabled(_ sender: NSMenuItem) {

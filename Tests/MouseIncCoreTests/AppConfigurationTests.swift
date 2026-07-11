@@ -14,6 +14,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.gestureOptions.maximumDuration, 5)
         XCTAssertTrue(configuration.gestureOptions.showsTrail)
         XCTAssertTrue(configuration.gestureOptions.reportsFailures)
+        XCTAssertEqual(configuration.actionSequenceOptions, ActionSequenceOptions())
         XCTAssertEqual(configuration.bindings, GestureBinding.defaults)
     }
 
@@ -36,6 +37,7 @@ final class AppConfigurationTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         XCTAssertEqual(object["schemaVersion"] as? Int, AppConfiguration.currentSchemaVersion)
         XCTAssertNotNil(object["gestureOptions"])
+        XCTAssertNotNil(object["actionSequenceOptions"])
         XCTAssertNotNil(object["bindings"])
         XCTAssertNil(object["enabled"])
         XCTAssertNil(object["startDistance"])
@@ -95,6 +97,46 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertFalse(current.showsTrail)
         XCTAssertTrue(current.reportsFailures)
         XCTAssertEqual(current.bindings, GestureBinding.defaults)
+    }
+
+    func testSchemaTwoMigratesWithDefaultActionSequenceOptions() throws {
+        let schemaTwo = Data(
+            #"{"schemaVersion":2,"gestureOptions":{"enabled":false},"bindings":[]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: schemaTwo)
+
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
+        XCTAssertFalse(configuration.enabled)
+        XCTAssertEqual(configuration.actionSequenceOptions, ActionSequenceOptions())
+
+        let encoded = try JSONEncoder().encode(configuration)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        XCTAssertEqual(object["schemaVersion"] as? Int, 3)
+        XCTAssertNotNil(object["actionSequenceOptions"])
+    }
+
+    func testDelayActionAndSequenceOptionsRoundTrip() throws {
+        let options = ActionSequenceOptions(
+            interruptionPolicy: .ignoreNew,
+            failurePolicy: .continueSequence,
+            maximumDelay: 12
+        )
+        let binding = GestureBinding(
+            gesture: "RIGHT-UP",
+            name: "Delayed",
+            actions: [.delay(seconds: 0.25), .init(type: .keyStroke, value: "Command+C")]
+        )
+        let configuration = AppConfiguration(
+            actionSequenceOptions: options,
+            bindings: [binding]
+        )
+
+        let data = try JSONEncoder().encode(configuration)
+        let decoded = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(decoded, configuration)
+        XCTAssertTrue(decoded.validate().isValid)
     }
 
     func testApplicationRuleTakesPriorityOverGlobalRule() {

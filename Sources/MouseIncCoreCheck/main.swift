@@ -73,7 +73,65 @@ private func runChecks() throws {
         throw CheckFailure.mismatch(name: "configuration round trip", expected: "equal", actual: "different")
     }
 
+    try runActionContractChecks()
     try runGestureSessionChecks()
+}
+
+private func runActionContractChecks() throws {
+    try check(
+        "schema version",
+        AppConfiguration.currentSchemaVersion == 3,
+        "P2 shared configuration must encode schema 3"
+    )
+    try check(
+        "default validation",
+        AppConfiguration().validate().isValid,
+        "default configuration failed validation"
+    )
+    try check(
+        "key stroke parsing",
+        KeyStrokeParser.parse("Cmd+Alt+C") == ParsedKeyStroke(
+            modifiers: [.command, .option],
+            key: "c"
+        ),
+        "key stroke aliases were not normalized"
+    )
+
+    let sequence = AppConfiguration(
+        actionSequenceOptions: ActionSequenceOptions(maximumDelay: 1),
+        bindings: [
+            GestureBinding(
+                gesture: "RIGHT-UP",
+                name: "Sequence",
+                actions: [.delay(seconds: 0.1), .init(type: .keyStroke, value: "Command+C")]
+            )
+        ]
+    )
+    try check(
+        "action sequence validation",
+        sequence.validate().isValid,
+        "valid delay sequence was rejected"
+    )
+
+    let schemaTwoData = Data(
+        #"{"schemaVersion":2,"gestureOptions":{"enabled":true},"bindings":[]}"#.utf8
+    )
+    let migrated = try JSONDecoder().decode(AppConfiguration.self, from: schemaTwoData)
+    try check(
+        "schema 2 migration",
+        migrated.schemaVersion == 3 && migrated.actionSequenceOptions == ActionSequenceOptions(),
+        "schema 2 did not migrate with safe action defaults"
+    )
+
+    let permissionSnapshot = PermissionSnapshot(
+        states: [.accessibility: .granted, .screenRecording: .denied]
+    )
+    try check(
+        "independent permissions",
+        permissionSnapshot.satisfies([.accessibility]) &&
+            !permissionSnapshot.satisfies([.accessibility, .screenRecording]),
+        "permission snapshot did not keep permission domains independent"
+    )
 }
 
 private func runGestureSessionChecks() throws {

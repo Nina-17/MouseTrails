@@ -24,6 +24,10 @@ let package = Package(
         .testTarget(
             name: "MouseIncCoreTests",
             dependencies: ["MouseIncCore"]
+        ),
+        .testTarget(
+            name: "MouseIncMacTests",
+            dependencies: ["MouseIncMac", "MouseIncCore"]
         )
     ]
 )

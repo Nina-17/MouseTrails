@@ -3,56 +3,173 @@ import MouseIncCore
 
 @MainActor
 final class ActionExecutor {
-    func execute(_ actions: [ActionDefinition]) {
-        for action in actions {
-            switch action.type {
-            case .keyStroke:
-                sendKeyStroke(action.value)
-            case .openURL:
-                if let url = URL(string: action.value) {
-                    NSWorkspace.shared.open(url)
-                }
-            case .launchApplication:
-                launchApplication(action.value)
+    typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
+
+    private var executionTask: Task<Void, Never>?
+    private var activeExecutionID: UUID?
+    private let eventLogger: EventLogger
+
+    init(eventLogger: @escaping EventLogger = { event, metadata in
+        DiagnosticLogger.shared.log(event: event, metadata: metadata)
+    }) {
+        self.eventLogger = eventLogger
+    }
+
+    var isExecuting: Bool {
+        executionTask != nil
+    }
+
+    func execute(
+        _ actions: [ActionDefinition],
+        options: ActionSequenceOptions = ActionSequenceOptions()
+    ) {
+        if executionTask != nil {
+            switch options.interruptionPolicy {
+            case .cancelPrevious:
+                cancel()
+            case .ignoreNew:
+                eventLogger(.actionSequenceIgnored, ["reason": "activeSequence"])
+                return
             }
         }
+
+        let executionID = UUID()
+        activeExecutionID = executionID
+        eventLogger(.actionSequenceStarted, ["actionCount": String(actions.count)])
+
+        executionTask = Task { @MainActor [weak self] in
+            for (index, action) in actions.enumerated() {
+                guard !Task.isCancelled else { return }
+
+                let succeeded: Bool
+                if action.type == .delay {
+                    succeeded = await Self.wait(
+                        value: action.value,
+                        maximumDelay: options.maximumDelay
+                    )
+                } else {
+                    guard let self else { return }
+                    succeeded = self.executeImmediately(action)
+                }
+
+                guard !Task.isCancelled else { return }
+
+                if !succeeded {
+                    self?.logActionFailure(action, index: index)
+                    if options.failurePolicy == .stop {
+                        self?.finish(executionID: executionID, outcome: "failed")
+                        return
+                    }
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            self?.finish(executionID: executionID, outcome: "completed")
+        }
     }
 
-    private func launchApplication(_ value: String) {
+    func cancel() {
+        guard executionTask != nil else { return }
+        executionTask?.cancel()
+        executionTask = nil
+        activeExecutionID = nil
+        eventLogger(.actionSequenceCancelled, [:])
+    }
+
+    private func executeImmediately(_ action: ActionDefinition) -> Bool {
+        switch action.type {
+        case .keyStroke:
+            return sendKeyStroke(action.value)
+        case .openURL:
+            guard let url = URL(string: action.value), url.scheme != nil else {
+                return false
+            }
+            return NSWorkspace.shared.open(url)
+        case .launchApplication:
+            return launchApplication(action.value)
+        case .delay:
+            return false
+        }
+    }
+
+    private static func wait(value: String, maximumDelay: TimeInterval) async -> Bool {
+        let safeMaximumDelay = min(max(maximumDelay, 0), 3_600)
+        guard
+            maximumDelay.isFinite,
+            let seconds = TimeInterval(value),
+            seconds.isFinite,
+            seconds >= 0,
+            seconds <= safeMaximumDelay
+        else {
+            return false
+        }
+
+        let nanoseconds = UInt64(seconds * 1_000_000_000)
+        do {
+            try await Task.sleep(nanoseconds: nanoseconds)
+            return !Task.isCancelled
+        } catch {
+            return false
+        }
+    }
+
+    private func launchApplication(_ value: String) -> Bool {
         if value.hasPrefix("/") {
+            guard FileManager.default.fileExists(atPath: value) else { return false }
             let url = URL(fileURLWithPath: value)
             NSWorkspace.shared.openApplication(at: url, configuration: .init())
+            return true
         } else if let applicationURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: value) {
             NSWorkspace.shared.openApplication(at: applicationURL, configuration: .init())
+            return true
         }
+        return false
     }
 
-    private func sendKeyStroke(_ value: String) {
-        let tokens = value.split(separator: "+").map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        }
-        guard let keyToken = tokens.last, let keyCode = KeyMap.code(for: keyToken) else {
-            return
+    private func sendKeyStroke(_ value: String) -> Bool {
+        guard
+            let keyStroke = KeyStrokeParser.parse(value),
+            let keyCode = KeyMap.code(for: keyStroke.key)
+        else {
+            return false
         }
 
         var flags: CGEventFlags = []
-        for token in tokens.dropLast() {
-            switch token {
-            case "command", "cmd": flags.insert(.maskCommand)
-            case "control", "ctrl": flags.insert(.maskControl)
-            case "option", "alt": flags.insert(.maskAlternate)
-            case "shift": flags.insert(.maskShift)
-            default: break
+        for modifier in keyStroke.modifiers {
+            switch modifier {
+            case .command: flags.insert(.maskCommand)
+            case .control: flags.insert(.maskControl)
+            case .option: flags.insert(.maskAlternate)
+            case .shift: flags.insert(.maskShift)
             }
         }
 
         let source = CGEventSource(stateID: .hidSystemState)
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
-        keyDown?.flags = flags
-        keyUp?.flags = flags
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
+        guard let keyDown, let keyUp else { return false }
+        keyDown.flags = flags
+        keyUp.flags = flags
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    private func logActionFailure(_ action: ActionDefinition, index: Int) {
+        eventLogger(
+            .actionFailed,
+            [
+                "index": String(index),
+                "type": action.type.rawValue
+            ]
+        )
+    }
+
+    private func finish(executionID: UUID, outcome: String) {
+        guard activeExecutionID == executionID else { return }
+        executionTask = nil
+        activeExecutionID = nil
+        eventLogger(.actionSequenceFinished, ["outcome": outcome])
     }
 }
 
@@ -75,4 +192,3 @@ private enum KeyMap {
         codes[token]
     }
 }
-

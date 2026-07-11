@@ -94,6 +94,7 @@ final class GestureMonitor: NSObject {
         }
         eventTap = nil
         runLoopSource = nil
+        executor.cancel()
         clearSession()
     }
 
@@ -197,7 +198,10 @@ final class GestureMonitor: NSObject {
                         for: gesture,
                         bundleIdentifier: targetBundleIdentifier
                     ) {
-                        executor.execute(binding.actions)
+                        executor.execute(
+                            binding.actions,
+                            options: configuration.actionSequenceOptions
+                        )
                         logger.info("Gesture matched: \(gesture, privacy: .public)")
                         DiagnosticLogger.shared.log("Gesture matched: \(gesture); action=\(binding.name)")
                         onGesture?("\(gesture) · \(binding.name)")

@@ -1,10 +1,11 @@
 import Foundation
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public let schemaVersion: Int
     public var gestureOptions: GestureOptions
+    public var actionSequenceOptions: ActionSequenceOptions
     public var bindings: [GestureBinding]
 
     public init(
@@ -15,6 +16,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         maximumDuration: TimeInterval = 5,
         showsTrail: Bool = true,
         reportsFailures: Bool = true,
+        actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
         schemaVersion = Self.currentSchemaVersion
@@ -27,15 +29,18 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
             showsTrail: showsTrail,
             reportsFailures: reportsFailures
         )
+        self.actionSequenceOptions = actionSequenceOptions
         self.bindings = bindings
     }
 
     public init(
         gestureOptions: GestureOptions,
+        actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.gestureOptions = gestureOptions
+        self.actionSequenceOptions = actionSequenceOptions
         self.bindings = bindings
     }
 
@@ -92,6 +97,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case gestureOptions
+        case actionSequenceOptions
         case bindings
 
         // Legacy schema (implicit version 1).
@@ -143,6 +149,10 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
                 ) ?? defaults.reportsFailures
             )
         }
+        actionSequenceOptions = try container.decodeIfPresent(
+            ActionSequenceOptions.self,
+            forKey: .actionSequenceOptions
+        ) ?? ActionSequenceOptions()
         bindings = try container.decodeIfPresent([GestureBinding].self, forKey: .bindings)
             ?? GestureBinding.defaults
     }
@@ -151,7 +161,57 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.currentSchemaVersion, forKey: .schemaVersion)
         try container.encode(gestureOptions, forKey: .gestureOptions)
+        try container.encode(actionSequenceOptions, forKey: .actionSequenceOptions)
         try container.encode(bindings, forKey: .bindings)
+    }
+}
+
+public struct ActionSequenceOptions: Codable, Equatable, Sendable {
+    public enum InterruptionPolicy: String, Codable, Sendable {
+        case cancelPrevious
+        case ignoreNew
+    }
+
+    public enum FailurePolicy: String, Codable, Sendable {
+        case stop
+        case continueSequence
+    }
+
+    public var interruptionPolicy: InterruptionPolicy
+    public var failurePolicy: FailurePolicy
+    public var maximumDelay: TimeInterval
+
+    public init(
+        interruptionPolicy: InterruptionPolicy = .cancelPrevious,
+        failurePolicy: FailurePolicy = .stop,
+        maximumDelay: TimeInterval = 60
+    ) {
+        self.interruptionPolicy = interruptionPolicy
+        self.failurePolicy = failurePolicy
+        self.maximumDelay = maximumDelay
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case interruptionPolicy
+        case failurePolicy
+        case maximumDelay
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = ActionSequenceOptions()
+        interruptionPolicy = try container.decodeIfPresent(
+            InterruptionPolicy.self,
+            forKey: .interruptionPolicy
+        ) ?? defaults.interruptionPolicy
+        failurePolicy = try container.decodeIfPresent(
+            FailurePolicy.self,
+            forKey: .failurePolicy
+        ) ?? defaults.failurePolicy
+        maximumDelay = try container.decodeIfPresent(
+            TimeInterval.self,
+            forKey: .maximumDelay
+        ) ?? defaults.maximumDelay
     }
 }
 
@@ -265,10 +325,11 @@ public struct GestureBinding: Codable, Equatable, Sendable {
 }
 
 public struct ActionDefinition: Codable, Equatable, Sendable {
-    public enum Kind: String, Codable, Sendable {
+    public enum Kind: String, Codable, CaseIterable, Sendable {
         case keyStroke
         case openURL
         case launchApplication
+        case delay
     }
 
     public var type: Kind
@@ -277,5 +338,9 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
     public init(type: Kind, value: String) {
         self.type = type
         self.value = value
+    }
+
+    public static func delay(seconds: TimeInterval) -> ActionDefinition {
+        ActionDefinition(type: .delay, value: String(seconds))
     }
 }
