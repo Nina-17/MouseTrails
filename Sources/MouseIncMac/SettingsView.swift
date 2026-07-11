@@ -57,7 +57,7 @@ struct SettingsView: View {
 
     private var bindingsSection: some View {
         Section("手势绑定") {
-            ForEach(model.draft.bindings.indices, id: \.self) { bindingIndex in
+            ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { bindingIndex, _ in
                 bindingEditor(at: bindingIndex)
             }
             Button {
@@ -70,12 +70,13 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func bindingEditor(at index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        if let binding = model.binding(at: index) {
+          VStack(alignment: .leading, spacing: 10) {
             HStack {
-                GesturePreview(identifier: model.draft.bindings[index].gesture)
+                GesturePreview(identifier: binding.gesture)
                     .frame(width: 90, height: 64)
-                TextField("名称", text: $model.draft.bindings[index].name)
-                TextField("手势，如 UP_RIGHT 或 DOWN-RIGHT", text: $model.draft.bindings[index].gesture)
+                TextField("名称", text: bindingText(at: index, keyPath: \.name))
+                TextField("手势，如 UP_RIGHT 或 DOWN-RIGHT", text: bindingText(at: index, keyPath: \.gesture))
                 Button { model.moveBinding(from: index, by: -1) } label: {
                     Image(systemName: "arrow.up")
                 }
@@ -93,7 +94,7 @@ struct SettingsView: View {
                 Button("选择应用…") { chooseApplication(for: index) }
             }
 
-            ForEach(model.draft.bindings[index].actions.indices, id: \.self) { actionIndex in
+            ForEach(binding.actions.indices, id: \.self) { actionIndex in
                 HStack {
                     Picker("", selection: actionTypeBinding(binding: index, action: actionIndex)) {
                         ForEach(ActionCatalog.descriptors, id: \.kind) { descriptor in
@@ -118,23 +119,24 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(issue.severity == .error ? Color.red : Color.orange)
             }
+          }
+          .padding(.vertical, 6)
         }
-        .padding(.vertical, 6)
     }
 
     @ViewBuilder
     private func actionValueEditor(binding: Int, action: Int) -> some View {
-        if model.draft.bindings[binding].actions[action].type == .windowAction {
-            Picker("窗口动作", selection: $model.draft.bindings[binding].actions[action].value) {
+        if actionKind(binding: binding, action: action) == .windowAction {
+            Picker("窗口动作", selection: actionValueBinding(binding: binding, action: action)) {
                 ForEach(WindowAction.allCases, id: \.self) { value in
                     Text(value.rawValue == "center" ? "居中窗口" : value.rawValue).tag(value.rawValue)
                 }
             }
             .labelsHidden()
         } else {
-            let kind = model.draft.bindings[binding].actions[action].type
+            let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
-                      text: $model.draft.bindings[binding].actions[action].value)
+                      text: actionValueBinding(binding: binding, action: action))
         }
     }
 
@@ -158,11 +160,58 @@ struct SettingsView: View {
 
     private func bundleIDsBinding(at index: Int) -> Binding<String> {
         Binding(
-            get: { model.draft.bindings[index].bundleIdentifiers.joined(separator: ", ") },
+            get: {
+                guard model.draft.bindings.indices.contains(index) else { return "" }
+                return model.draft.bindings[index].bundleIdentifiers.joined(separator: ", ")
+            },
             set: { value in
+                guard model.draft.bindings.indices.contains(index) else { return }
                 model.draft.bindings[index].bundleIdentifiers = value
                     .split(separator: ",", omittingEmptySubsequences: true)
                     .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            }
+        )
+    }
+
+    private func bindingText(
+        at index: Int,
+        keyPath: WritableKeyPath<GestureBinding, String>
+    ) -> Binding<String> {
+        Binding(
+            get: {
+                guard model.draft.bindings.indices.contains(index) else { return "" }
+                return model.draft.bindings[index][keyPath: keyPath]
+            },
+            set: { value in
+                guard model.draft.bindings.indices.contains(index) else { return }
+                model.draft.bindings[index][keyPath: keyPath] = value
+            }
+        )
+    }
+
+    private func actionKind(binding: Int, action: Int) -> ActionDefinition.Kind {
+        guard
+            model.draft.bindings.indices.contains(binding),
+            model.draft.bindings[binding].actions.indices.contains(action)
+        else { return .keyStroke }
+        return model.draft.bindings[binding].actions[action].type
+    }
+
+    private func actionValueBinding(binding: Int, action: Int) -> Binding<String> {
+        Binding(
+            get: {
+                guard
+                    model.draft.bindings.indices.contains(binding),
+                    model.draft.bindings[binding].actions.indices.contains(action)
+                else { return "" }
+                return model.draft.bindings[binding].actions[action].value
+            },
+            set: { value in
+                guard
+                    model.draft.bindings.indices.contains(binding),
+                    model.draft.bindings[binding].actions.indices.contains(action)
+                else { return }
+                model.draft.bindings[binding].actions[action].value = value
             }
         )
     }

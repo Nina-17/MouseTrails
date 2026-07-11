@@ -5,6 +5,7 @@ import MouseIncCore
 final class SettingsViewModel: ObservableObject {
     @Published var draft: AppConfiguration
     @Published private(set) var saveMessage: String?
+    private(set) var bindingIDs: [UUID]
 
     private let saveHandler: @MainActor (AppConfiguration) throws -> Void
 
@@ -13,6 +14,7 @@ final class SettingsViewModel: ObservableObject {
         saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void
     ) {
         draft = configuration
+        bindingIDs = configuration.bindings.map { _ in UUID() }
         self.saveHandler = saveHandler
     }
 
@@ -25,11 +27,13 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func reload(_ configuration: AppConfiguration) {
+        bindingIDs = configuration.bindings.map { _ in UUID() }
         draft = configuration
         saveMessage = nil
     }
 
     func addBinding() {
+        bindingIDs.append(UUID())
         draft.bindings.append(
             GestureBinding(
                 gesture: "UP_RIGHT",
@@ -40,7 +44,11 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func removeBinding(at index: Int) {
-        guard draft.bindings.indices.contains(index) else { return }
+        guard
+            draft.bindings.indices.contains(index),
+            bindingIDs.indices.contains(index)
+        else { return }
+        bindingIDs.remove(at: index)
         draft.bindings.remove(at: index)
     }
 
@@ -50,7 +58,13 @@ final class SettingsViewModel: ObservableObject {
             draft.bindings.indices.contains(index),
             draft.bindings.indices.contains(destination)
         else { return }
+        bindingIDs.swapAt(index, destination)
         draft.bindings.swapAt(index, destination)
+    }
+
+    func binding(at index: Int) -> GestureBinding? {
+        guard draft.bindings.indices.contains(index) else { return nil }
+        return draft.bindings[index]
     }
 
     func useApplication(at url: URL, for bindingIndex: Int) -> Bool {

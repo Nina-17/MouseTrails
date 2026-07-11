@@ -54,6 +54,21 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertTrue(model.issues(for: 1).isEmpty)
     }
 
+    func testBindingIdentitiesStayAlignedAfterRemovalAndMove() {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+        let firstID = model.bindingIDs[0]
+        let secondID = model.bindingIDs[1]
+
+        model.removeBinding(at: 0)
+        XCTAssertEqual(model.bindingIDs.first, secondID)
+        XCTAssertEqual(model.bindingIDs.count, model.draft.bindings.count)
+
+        model.moveBinding(from: 0, by: 1)
+        XCTAssertNotEqual(model.bindingIDs.first, secondID)
+        XCTAssertFalse(model.bindingIDs.contains(firstID))
+        XCTAssertEqual(model.bindingIDs.count, model.draft.bindings.count)
+    }
+
     func testApplicationPickerRejectsNonApplicationURL() {
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
 

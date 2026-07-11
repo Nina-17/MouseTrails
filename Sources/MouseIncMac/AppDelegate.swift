@@ -176,6 +176,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+        statusItem.isVisible = true
         self.statusItem = statusItem
         self.enabledItem = enabledItem
         self.permissionItem = permissionItem
