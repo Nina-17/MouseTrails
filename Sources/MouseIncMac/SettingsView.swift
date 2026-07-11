@@ -76,7 +76,22 @@ struct SettingsView: View {
                 GesturePreview(identifier: binding.gesture)
                     .frame(width: 90, height: 64)
                 TextField("名称", text: bindingText(at: index, keyPath: \.name))
-                TextField("手势，如 UP_RIGHT 或 DOWN-RIGHT", text: bindingText(at: index, keyPath: \.gesture))
+                Menu {
+                    Section("单方向") {
+                        gestureChoices(cardinalGestureChoices, bindingIndex: index)
+                    }
+                    Section("复杂模板") {
+                        gestureChoices(templateGestureChoices, bindingIndex: index)
+                    }
+                    Section("常用折线") {
+                        gestureChoices(polylineGestureChoices, bindingIndex: index)
+                    }
+                } label: {
+                    Label(displayName(for: binding.gesture), systemImage: "scribble.variable")
+                }
+                .frame(minWidth: 130)
+                TextField("手势标识", text: bindingText(at: index, keyPath: \.gesture))
+                    .frame(minWidth: 120)
                 Button { model.moveBinding(from: index, by: -1) } label: {
                     Image(systemName: "arrow.up")
                 }
@@ -251,6 +266,44 @@ struct SettingsView: View {
             alert.informativeText = "请选择包含 Bundle Identifier 的 macOS 应用。"
             alert.runModal()
         }
+    }
+
+    @ViewBuilder
+    private func gestureChoices(_ choices: [(String, String)], bindingIndex: Int) -> some View {
+        ForEach(choices, id: \.0) { identifier, name in
+            Button(name) { model.setGesture(identifier, for: bindingIndex) }
+        }
+    }
+
+    private var cardinalGestureChoices: [(String, String)] {
+        [
+            ("UP", "上"), ("DOWN", "下"), ("LEFT", "左"), ("RIGHT", "右"),
+            ("UP_LEFT", "左上"), ("UP_RIGHT", "右上"),
+            ("DOWN_LEFT", "左下"), ("DOWN_RIGHT", "右下")
+        ]
+    }
+
+    private var templateGestureChoices: [(String, String)] {
+        [
+            ("CIRCLE", "圆形"),
+            ("LETTER_C", "字母 C"),
+            ("LETTER_M", "字母 M"),
+            ("LETTER_Z", "字母 Z")
+        ]
+    }
+
+    private var polylineGestureChoices: [(String, String)] {
+        [
+            ("DOWN-RIGHT", "下 → 右"),
+            ("UP-RIGHT", "上 → 右"),
+            ("LEFT-DOWN", "左 → 下"),
+            ("RIGHT-DOWN", "右 → 下")
+        ]
+    }
+
+    private func displayName(for identifier: String) -> String {
+        (cardinalGestureChoices + templateGestureChoices + polylineGestureChoices)
+            .first { $0.0 == identifier }?.1 ?? identifier
     }
 
     private func defaultValue(for kind: ActionDefinition.Kind) -> String {

@@ -69,6 +69,16 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.bindingIDs.count, model.draft.bindings.count)
     }
 
+    func testGestureCanBeSelectedForNewBinding() {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+        model.addBinding()
+        let index = model.draft.bindings.count - 1
+
+        model.setGesture("LETTER_C", for: index)
+
+        XCTAssertEqual(model.draft.bindings[index].gesture, "LETTER_C")
+    }
+
     func testApplicationPickerRejectsNonApplicationURL() {
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
 

@@ -67,6 +67,11 @@ final class SettingsViewModel: ObservableObject {
         return draft.bindings[index]
     }
 
+    func setGesture(_ gesture: String, for bindingIndex: Int) {
+        guard draft.bindings.indices.contains(bindingIndex) else { return }
+        draft.bindings[bindingIndex].gesture = gesture
+    }
+
     func useApplication(at url: URL, for bindingIndex: Int) -> Bool {
         guard
             draft.bindings.indices.contains(bindingIndex),
