@@ -169,8 +169,18 @@ struct SettingsView: View {
 
     private func actionTypeBinding(binding: Int, action: Int) -> Binding<ActionDefinition.Kind> {
         Binding(
-            get: { model.draft.bindings[binding].actions[action].type },
+            get: {
+                guard
+                    model.draft.bindings.indices.contains(binding),
+                    model.draft.bindings[binding].actions.indices.contains(action)
+                else { return .keyStroke }
+                return model.draft.bindings[binding].actions[action].type
+            },
             set: { kind in
+                guard
+                    model.draft.bindings.indices.contains(binding),
+                    model.draft.bindings[binding].actions.indices.contains(action)
+                else { return }
                 model.draft.bindings[binding].actions[action].type = kind
                 model.draft.bindings[binding].actions[action].value = defaultValue(for: kind)
             }

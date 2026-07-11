@@ -52,13 +52,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor?.stop()
     }
 
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        openSettings()
+        return true
+    }
+
     private func configureStatusItem() {
-        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "cursorarrow.motionlines",
                 accessibilityDescription: "MouseIncMac"
             )
+            button.image?.isTemplate = true
+            button.imagePosition = .imageLeading
+            button.title = "MI"
             button.toolTip = "MouseIncMac"
         }
 
