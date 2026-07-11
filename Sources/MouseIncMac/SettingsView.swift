@@ -343,8 +343,8 @@ struct SettingsView: View {
     private func windowActionName(_ action: WindowAction) -> String {
         switch action {
         case .center: return "居中窗口"
-        case .maximize: return "最大化窗口"
-        case .restore: return "还原窗口"
+        case .maximize: return "切换全屏（独立空间）"
+        case .restore: return "切换全屏（兼容旧配置）"
         case .minimize: return "最小化窗口"
         case .close: return "关闭窗口"
         }

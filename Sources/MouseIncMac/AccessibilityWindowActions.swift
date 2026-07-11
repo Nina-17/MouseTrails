@@ -4,21 +4,16 @@ import MouseIncCore
 
 @MainActor
 enum AccessibilityWindowActions {
-    private struct WindowKey: Hashable {
-        var processIdentifier: pid_t
-        var elementHash: CFHashCode
-    }
-
-    private static var restoreFrames: [WindowKey: CGRect] = [:]
-
     static func perform(_ action: WindowAction) -> Bool {
         switch action {
         case .center:
             return centerFrontmostWindow()
         case .maximize:
-            return maximizeFrontmostWindow()
+            return toggleFullScreen()
         case .restore:
-            return restoreFrontmostWindow()
+            // Kept for schema-3 configuration compatibility. Full screen is a
+            // native toggle, so legacy restore actions perform the same shortcut.
+            return toggleFullScreen()
         case .minimize:
             return setBooleanAttribute(kAXMinimizedAttribute, value: true)
         case .close:
@@ -26,29 +21,18 @@ enum AccessibilityWindowActions {
         }
     }
 
-    private static func maximizeFrontmostWindow() -> Bool {
+    private static func toggleFullScreen() -> Bool {
+        guard NSWorkspace.shared.frontmostApplication != nil else { return false }
+        let source = CGEventSource(stateID: .hidSystemState)
         guard
-            let context = focusedWindowContext(),
-            let position = pointAttribute(kAXPositionAttribute, from: context.window),
-            let size = sizeAttribute(kAXSizeAttribute, from: context.window),
-            let visibleBounds = quartzVisibleBounds(containing: CGPoint(
-                x: position.x + size.width / 2,
-                y: position.y + size.height / 2
-            ))
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 3, keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 3, keyDown: false)
         else { return false }
-
-        if restoreFrames[context.key] == nil {
-            restoreFrames[context.key] = CGRect(origin: position, size: size)
-        }
-        return setFrame(visibleBounds, on: context.window)
-    }
-
-    private static func restoreFrontmostWindow() -> Bool {
-        guard
-            let context = focusedWindowContext(),
-            let frame = restoreFrames.removeValue(forKey: context.key)
-        else { return false }
-        return setFrame(frame, on: context.window)
+        keyDown.flags = [.maskCommand, .maskControl]
+        keyUp.flags = [.maskCommand, .maskControl]
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
     }
 
     private static func setBooleanAttribute(_ attribute: String, value: Bool) -> Bool {
@@ -115,39 +99,6 @@ enum AccessibilityWindowActions {
             return nil
         }
         return unsafeDowncast(value, to: AXUIElement.self)
-    }
-
-    private static func focusedWindowContext() -> (window: AXUIElement, key: WindowKey)? {
-        guard
-            let application = NSWorkspace.shared.frontmostApplication,
-            let window = focusedWindow()
-        else { return nil }
-        return (
-            window,
-            WindowKey(
-                processIdentifier: application.processIdentifier,
-                elementHash: CFHash(window)
-            )
-        )
-    }
-
-    private static func setFrame(_ frame: CGRect, on window: AXUIElement) -> Bool {
-        var position = frame.origin
-        var size = frame.size
-        guard
-            let positionValue = AXValueCreate(.cgPoint, &position),
-            let sizeValue = AXValueCreate(.cgSize, &size),
-            AXUIElementSetAttributeValue(
-                window,
-                kAXPositionAttribute as CFString,
-                positionValue
-            ) == .success
-        else { return false }
-        return AXUIElementSetAttributeValue(
-            window,
-            kAXSizeAttribute as CFString,
-            sizeValue
-        ) == .success
     }
 
     private static func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
