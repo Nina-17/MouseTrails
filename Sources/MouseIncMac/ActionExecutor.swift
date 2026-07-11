@@ -4,15 +4,21 @@ import MouseIncCore
 @MainActor
 final class ActionExecutor {
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
+    typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
     private let eventLogger: EventLogger
+    private let windowActionHandler: WindowActionHandler
 
-    init(eventLogger: @escaping EventLogger = { event, metadata in
-        DiagnosticLogger.shared.log(event: event, metadata: metadata)
-    }) {
+    init(
+        eventLogger: @escaping EventLogger = { event, metadata in
+            DiagnosticLogger.shared.log(event: event, metadata: metadata)
+        },
+        windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform
+    ) {
         self.eventLogger = eventLogger
+        self.windowActionHandler = windowActionHandler
     }
 
     var isExecuting: Bool {
@@ -89,6 +95,9 @@ final class ActionExecutor {
             return launchApplication(action.value)
         case .delay:
             return false
+        case .windowAction:
+            guard let windowAction = WindowAction(rawValue: action.value) else { return false }
+            return windowActionHandler(windowAction)
         }
     }
 

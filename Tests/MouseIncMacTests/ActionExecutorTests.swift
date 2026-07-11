@@ -59,7 +59,27 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(executor.isExecuting)
     }
 
+    func testWindowActionUsesInjectedHandler() async throws {
+        var receivedAction: WindowAction?
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            windowActionHandler: { action in
+                receivedAction = action
+                return true
+            }
+        )
+
+        executor.execute([.init(type: .windowAction, value: WindowAction.center.rawValue)])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(receivedAction, .center)
+        XCTAssertFalse(executor.isExecuting)
+    }
+
     private func makeExecutor() -> ActionExecutor {
-        ActionExecutor(eventLogger: { _, _ in })
+        ActionExecutor(
+            eventLogger: { _, _ in },
+            windowActionHandler: { _ in true }
+        )
     }
 }

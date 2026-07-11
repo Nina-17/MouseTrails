@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitorItem: NSMenuItem?
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
+    private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let permissions = PermissionCoordinator.snapshot
@@ -121,6 +122,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lastGestureItem = NSMenuItem(title: "最近手势：无", action: nil, keyEquivalent: "")
         lastGestureItem.isEnabled = false
         menu.addItem(lastGestureItem)
+
+        let settingsItem = NSMenuItem(
+            title: "打开设置…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         let openConfigItem = NSMenuItem(
             title: "打开配置文件",
@@ -274,6 +283,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             presentError(title: "无法打开配置", message: error.localizedDescription)
         }
+    }
+
+    @objc private func openSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController(
+                configuration: configuration,
+                saveHandler: { [weak self] configuration in
+                    guard let self else { return }
+                    try self.configStore.save(configuration)
+                    self.configuration = configuration
+                    self.enabledItem?.state = configuration.enabled ? .on : .off
+                    self.lastGestureItem?.title = "最近手势：配置已保存"
+                }
+            )
+        }
+        settingsWindowController?.show(configuration: configuration)
     }
 
     @objc private func reloadConfiguration() {

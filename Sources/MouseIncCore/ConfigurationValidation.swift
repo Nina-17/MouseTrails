@@ -193,6 +193,8 @@ public extension AppConfiguration {
             } else {
                 message = "延时必须是 0...\(actionSequenceOptions.maximumDelay) 秒之间的数值"
             }
+        case .windowAction:
+            message = WindowAction(rawValue: value) == nil ? "不支持的窗口操作" : nil
         }
 
         if let message {

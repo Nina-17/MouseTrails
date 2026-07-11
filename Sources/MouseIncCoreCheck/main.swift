@@ -37,6 +37,16 @@ private func runChecks() throws {
     try check("down", recognizer.recognize([.init(x: 0, y: 100), .init(x: 0, y: 0)]), equals: "DOWN")
     try check("left", recognizer.recognize([.init(x: 100, y: 0), .init(x: 0, y: 0)]), equals: "LEFT")
     try check("right", recognizer.recognize([.init(x: 0, y: 0), .init(x: 100, y: 0)]), equals: "RIGHT")
+    try check(
+        "up-right diagonal",
+        recognizer.recognize([.init(x: 0, y: 0), .init(x: 100, y: 100)]),
+        equals: "UP_RIGHT"
+    )
+    try check(
+        "down-left diagonal",
+        recognizer.recognize([.init(x: 100, y: 100), .init(x: 0, y: 0)]),
+        equals: "DOWN_LEFT"
+    )
 
     let corner = [
         CGPoint(x: 0, y: 100),

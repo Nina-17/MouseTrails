@@ -7,6 +7,10 @@ public enum KeyStrokeModifier: String, Codable, CaseIterable, Sendable {
     case shift
 }
 
+public enum WindowAction: String, Codable, CaseIterable, Sendable {
+    case center
+}
+
 public struct ParsedKeyStroke: Equatable, Sendable {
     public var modifiers: Set<KeyStrokeModifier>
     public var key: String
@@ -102,6 +106,13 @@ public enum ActionCatalog {
                 kind: .delay,
                 displayName: "延时",
                 valueDescription: "秒数"
+            )
+        case .windowAction:
+            ActionDescriptor(
+                kind: .windowAction,
+                displayName: "窗口操作",
+                valueDescription: "例如 center",
+                requiredPermissions: [.accessibility]
             )
         }
     }

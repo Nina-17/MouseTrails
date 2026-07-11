@@ -86,15 +86,31 @@ private enum Direction: String {
     case down = "DOWN"
     case left = "LEFT"
     case right = "RIGHT"
+    case upLeft = "UP_LEFT"
+    case upRight = "UP_RIGHT"
+    case downLeft = "DOWN_LEFT"
+    case downRight = "DOWN_RIGHT"
 
     init(from start: CGPoint, to end: CGPoint) {
         let dx = end.x - start.x
         let dy = end.y - start.y
-        if abs(dx) >= abs(dy) {
+        let absoluteX = abs(dx)
+        let absoluteY = abs(dy)
+        let minorToMajorRatio = min(absoluteX, absoluteY) / max(absoluteX, absoluteY)
+
+        // tan(22.5°): values within 22.5° of a cardinal axis remain
+        // cardinal; the middle 45° sectors become diagonal directions.
+        if minorToMajorRatio >= 0.414_213_562_37 {
+            switch (dx >= 0, dy >= 0) {
+            case (true, true): self = .upRight
+            case (false, true): self = .upLeft
+            case (true, false): self = .downRight
+            case (false, false): self = .downLeft
+            }
+        } else if absoluteX >= absoluteY {
             self = dx >= 0 ? .right : .left
         } else {
             self = dy >= 0 ? .up : .down
         }
     }
 }
-

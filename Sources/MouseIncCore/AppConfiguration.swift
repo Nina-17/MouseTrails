@@ -330,6 +330,7 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case openURL
         case launchApplication
         case delay
+        case windowAction
     }
 
     public var type: Kind
