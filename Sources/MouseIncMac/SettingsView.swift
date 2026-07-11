@@ -1,5 +1,6 @@
 import MouseIncCore
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
@@ -71,13 +72,26 @@ struct SettingsView: View {
     private func bindingEditor(at index: Int) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                GesturePreview(identifier: model.draft.bindings[index].gesture)
+                    .frame(width: 90, height: 64)
                 TextField("名称", text: $model.draft.bindings[index].name)
                 TextField("手势，如 UP_RIGHT 或 DOWN-RIGHT", text: $model.draft.bindings[index].gesture)
+                Button { model.moveBinding(from: index, by: -1) } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .disabled(index == 0)
+                Button { model.moveBinding(from: index, by: 1) } label: {
+                    Image(systemName: "arrow.down")
+                }
+                .disabled(index == model.draft.bindings.count - 1)
                 Button(role: .destructive) { model.removeBinding(at: index) } label: {
                     Image(systemName: "trash")
                 }
             }
-            TextField("Bundle ID（逗号分隔；留空表示全局）", text: bundleIDsBinding(at: index))
+            HStack {
+                TextField("Bundle ID（逗号分隔；留空表示全局）", text: bundleIDsBinding(at: index))
+                Button("选择应用…") { chooseApplication(for: index) }
+            }
 
             ForEach(model.draft.bindings[index].actions.indices, id: \.self) { actionIndex in
                 HStack {
@@ -98,6 +112,12 @@ struct SettingsView: View {
             }
             Button("添加动作") { model.addAction(to: index) }
                 .buttonStyle(.link)
+            ForEach(Array(model.issues(for: index).enumerated()), id: \.offset) { _, issue in
+                Label(issue.message, systemImage: issue.severity == .error
+                      ? "exclamationmark.triangle.fill" : "info.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(issue.severity == .error ? Color.red : Color.orange)
+            }
         }
         .padding(.vertical, 6)
     }
@@ -155,6 +175,23 @@ struct SettingsView: View {
                 model.draft.bindings[binding].actions[action].value = defaultValue(for: kind)
             }
         )
+    }
+
+    private func chooseApplication(for bindingIndex: Int) {
+        let panel = NSOpenPanel()
+        panel.title = "选择应用"
+        panel.prompt = "使用此应用"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if !model.useApplication(at: url, for: bindingIndex) {
+            let alert = NSAlert()
+            alert.messageText = "无法读取应用标识"
+            alert.informativeText = "请选择包含 Bundle Identifier 的 macOS 应用。"
+            alert.runModal()
+        }
     }
 
     private func defaultValue(for kind: ActionDefinition.Kind) -> String {

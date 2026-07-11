@@ -29,6 +29,10 @@ public struct GestureRecognizer: Sendable {
         }
 
         guard !directions.isEmpty else { return nil }
+        if directions.count >= 3,
+           let template = GestureTemplateRecognizer().recognize(points) {
+            return template.identifier
+        }
         return directions.map(\.rawValue).joined(separator: "-")
     }
 

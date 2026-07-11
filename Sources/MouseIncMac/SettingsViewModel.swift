@@ -44,6 +44,29 @@ final class SettingsViewModel: ObservableObject {
         draft.bindings.remove(at: index)
     }
 
+    func moveBinding(from index: Int, by offset: Int) {
+        let destination = index + offset
+        guard
+            draft.bindings.indices.contains(index),
+            draft.bindings.indices.contains(destination)
+        else { return }
+        draft.bindings.swapAt(index, destination)
+    }
+
+    func useApplication(at url: URL, for bindingIndex: Int) -> Bool {
+        guard
+            draft.bindings.indices.contains(bindingIndex),
+            url.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
+            let bundleIdentifier = Bundle(url: url)?.bundleIdentifier
+        else { return false }
+        draft.bindings[bindingIndex].bundleIdentifiers = [bundleIdentifier]
+        return true
+    }
+
+    func issues(for bindingIndex: Int) -> [ConfigurationIssue] {
+        validation.issues.filter { $0.path.hasPrefix("bindings[\(bindingIndex)]") }
+    }
+
     func addAction(to bindingIndex: Int) {
         guard draft.bindings.indices.contains(bindingIndex) else { return }
         draft.bindings[bindingIndex].actions.append(

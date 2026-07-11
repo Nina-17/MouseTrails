@@ -40,4 +40,33 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(savedConfiguration?.showsTrail, false)
         XCTAssertEqual(model.saveMessage, "已保存并生效")
     }
+
+    func testMovesBindingAndReportsScopedIssues() {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+        let originalSecondGesture = model.draft.bindings[1].gesture
+
+        model.moveBinding(from: 1, by: -1)
+        model.draft.bindings[0].gesture = ""
+
+        XCTAssertEqual(model.draft.bindings[0].gesture, "")
+        XCTAssertEqual(originalSecondGesture, "DOWN")
+        XCTAssertTrue(model.issues(for: 0).contains { $0.code == .emptyGesture })
+        XCTAssertTrue(model.issues(for: 1).isEmpty)
+    }
+
+    func testApplicationPickerRejectsNonApplicationURL() {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+
+        XCTAssertFalse(model.useApplication(at: URL(fileURLWithPath: "/tmp/file.txt"), for: 0))
+        XCTAssertTrue(model.draft.bindings[0].bundleIdentifiers.isEmpty)
+    }
+
+    func testApplicationPickerReadsBundleIdentifier() throws {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+        let finderURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: finderURL.path))
+
+        XCTAssertTrue(model.useApplication(at: finderURL, for: 0))
+        XCTAssertEqual(model.draft.bindings[0].bundleIdentifiers, ["com.apple.finder"])
+    }
 }
