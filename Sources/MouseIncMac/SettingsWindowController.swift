@@ -8,9 +8,16 @@ final class SettingsWindowController: NSWindowController {
 
     init(
         configuration: AppConfiguration,
-        saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void
+        saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
+        exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void,
+        restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration
     ) {
-        model = SettingsViewModel(configuration: configuration, saveHandler: saveHandler)
+        model = SettingsViewModel(
+            configuration: configuration,
+            saveHandler: saveHandler,
+            exportHandler: exportHandler,
+            restoreHandler: restoreHandler
+        )
         let hostingController = NSHostingController(rootView: SettingsView(model: model))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "MouseIncMac 设置"

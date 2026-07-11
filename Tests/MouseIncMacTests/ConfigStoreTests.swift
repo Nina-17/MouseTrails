@@ -54,6 +54,40 @@ final class ConfigStoreTests: XCTestCase {
         }
         XCTAssertEqual(try Data(contentsOf: fixture.fileURL), invalid)
     }
+
+    func testExportsAndRestoresValidatedConfigurationWithBackup() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.store.loadOrCreate()
+        let exportURL = fixture.directoryURL.appendingPathComponent("export.json")
+        var replacement = original
+        replacement.showsTrail = false
+        try fixture.store.export(replacement, to: exportURL)
+
+        let restored = try fixture.store.restore(from: exportURL)
+
+        XCTAssertFalse(restored.showsTrail)
+        XCTAssertEqual(try fixture.store.loadOrCreate(), replacement)
+        let backups = try FileManager.default.contentsOfDirectory(
+            at: fixture.directoryURL,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix("config.pre-restore-") }
+        XCTAssertEqual(backups.count, 1)
+        XCTAssertEqual(try JSONDecoder().decode(AppConfiguration.self, from: Data(contentsOf: backups[0])), original)
+    }
+
+    func testInvalidRestoreDoesNotCreateBackupOrChangeConfiguration() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try fixture.store.loadOrCreate()
+        let invalidURL = fixture.directoryURL.appendingPathComponent("invalid.json")
+        try Data("not-json".utf8).write(to: invalidURL)
+
+        XCTAssertThrowsError(try fixture.store.restore(from: invalidURL))
+        XCTAssertEqual(try fixture.store.loadOrCreate(), original)
+        let names = try FileManager.default.contentsOfDirectory(atPath: fixture.directoryURL.path)
+        XCTAssertFalse(names.contains { $0.hasPrefix("config.pre-restore-") })
+    }
 }
 
 @MainActor

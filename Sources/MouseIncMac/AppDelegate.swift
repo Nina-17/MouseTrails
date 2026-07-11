@@ -307,6 +307,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.configuration = configuration
                     self.enabledItem?.state = configuration.enabled ? .on : .off
                     self.lastGestureItem?.title = "最近手势：配置已保存"
+                },
+                exportHandler: { [weak self] configuration, url in
+                    guard let self else { return }
+                    try self.configStore.export(configuration, to: url)
+                },
+                restoreHandler: { [weak self] url in
+                    guard let self else { throw CocoaError(.fileNoSuchFile) }
+                    let configuration = try self.configStore.restore(from: url)
+                    self.configuration = configuration
+                    self.enabledItem?.state = configuration.enabled ? .on : .off
+                    self.lastGestureItem?.title = "最近手势：配置已恢复"
+                    return configuration
                 }
             )
         }

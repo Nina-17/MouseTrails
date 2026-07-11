@@ -11,6 +11,8 @@ struct SettingsView: View {
                 gestureSection
                 sequenceSection
                 bindingsSection
+                permissionSection
+                configurationFilesSection
                 validationSection
             }
             .formStyle(.grouped)
@@ -144,7 +146,7 @@ struct SettingsView: View {
         if actionKind(binding: binding, action: action) == .windowAction {
             Picker("窗口动作", selection: actionValueBinding(binding: binding, action: action)) {
                 ForEach(WindowAction.allCases, id: \.self) { value in
-                    Text(value.rawValue == "center" ? "居中窗口" : value.rawValue).tag(value.rawValue)
+                    Text(windowActionName(value)).tag(value.rawValue)
                 }
             }
             .labelsHidden()
@@ -166,6 +168,50 @@ struct SettingsView: View {
                         .foregroundStyle(issue.severity == .error ? Color.red : Color.orange)
                 }
             }
+        }
+    }
+
+    private var permissionSection: some View {
+        let snapshot = PermissionCoordinator.snapshot
+        return Section("权限") {
+            permissionRow("辅助功能", state: snapshot[.accessibility], required: true)
+            permissionRow("屏幕录制", state: snapshot[.screenRecording], required: false)
+            permissionRow("输入监控", state: snapshot[.inputMonitoring], required: false)
+            Text("当前手势与窗口动作只需要辅助功能权限。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var configurationFilesSection: some View {
+        Section("导出与恢复") {
+            HStack {
+                Button("导出配置…") { exportConfiguration() }
+                    .disabled(!model.canSave)
+                Button("从备份恢复…") { restoreConfiguration() }
+            }
+            Text("恢复前会先在配置目录保存当前文件的时间戳备份。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func permissionRow(_ name: String, state: PermissionState, required: Bool) -> some View {
+        HStack {
+            Text(name)
+            Spacer()
+            Text(permissionStateName(state, required: required))
+                .foregroundStyle(state == .granted ? Color.green : (required ? Color.red : Color.secondary))
+        }
+    }
+
+    private func permissionStateName(_ state: PermissionState, required: Bool) -> String {
+        if !required, state != .granted { return "当前未使用" }
+        switch state {
+        case .granted: return "已授权"
+        case .denied: return "未授权"
+        case .notDetermined: return "未请求"
+        case .unavailable: return "不可用"
         }
     }
 
@@ -265,6 +311,42 @@ struct SettingsView: View {
             alert.messageText = "无法读取应用标识"
             alert.informativeText = "请选择包含 Bundle Identifier 的 macOS 应用。"
             alert.runModal()
+        }
+    }
+
+    private func exportConfiguration() {
+        let panel = NSSavePanel()
+        panel.title = "导出 MouseIncMac 配置"
+        panel.nameFieldStringValue = "MouseIncMac-config.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        model.export(to: url)
+    }
+
+    private func restoreConfiguration() {
+        let panel = NSOpenPanel()
+        panel.title = "选择 MouseIncMac 配置备份"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "恢复此配置？"
+        alert.informativeText = "现有配置会先自动备份，然后替换为选中的配置。"
+        alert.addButton(withTitle: "恢复")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        model.restore(from: url)
+    }
+
+    private func windowActionName(_ action: WindowAction) -> String {
+        switch action {
+        case .center: return "居中窗口"
+        case .maximize: return "最大化窗口"
+        case .restore: return "还原窗口"
+        case .minimize: return "最小化窗口"
+        case .close: return "关闭窗口"
         }
     }
 

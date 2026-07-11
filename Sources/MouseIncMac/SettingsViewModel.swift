@@ -8,14 +8,22 @@ final class SettingsViewModel: ObservableObject {
     private(set) var bindingIDs: [UUID]
 
     private let saveHandler: @MainActor (AppConfiguration) throws -> Void
+    private let exportHandler: @MainActor (AppConfiguration, URL) throws -> Void
+    private let restoreHandler: @MainActor (URL) throws -> AppConfiguration
 
     init(
         configuration: AppConfiguration,
-        saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void
+        saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
+        exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void = { _, _ in },
+        restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration = { _ in
+            throw CocoaError(.fileReadUnsupportedScheme)
+        }
     ) {
         draft = configuration
         bindingIDs = configuration.bindings.map { _ in UUID() }
         self.saveHandler = saveHandler
+        self.exportHandler = exportHandler
+        self.restoreHandler = restoreHandler
     }
 
     var validation: ConfigurationValidationResult {
@@ -109,6 +117,28 @@ final class SettingsViewModel: ObservableObject {
         do {
             try saveHandler(draft)
             saveMessage = "已保存并生效"
+        } catch {
+            saveMessage = error.localizedDescription
+        }
+    }
+
+    func export(to url: URL) {
+        guard canSave else {
+            saveMessage = "请先修复配置错误"
+            return
+        }
+        do {
+            try exportHandler(draft, url)
+            saveMessage = "配置已导出"
+        } catch {
+            saveMessage = error.localizedDescription
+        }
+    }
+
+    func restore(from url: URL) {
+        do {
+            reload(try restoreHandler(url))
+            saveMessage = "配置已恢复并生效"
         } catch {
             saveMessage = error.localizedDescription
         }

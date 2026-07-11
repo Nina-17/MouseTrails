@@ -9,6 +9,10 @@ public enum KeyStrokeModifier: String, Codable, CaseIterable, Sendable {
 
 public enum WindowAction: String, Codable, CaseIterable, Sendable {
     case center
+    case maximize
+    case restore
+    case minimize
+    case close
 }
 
 public struct ParsedKeyStroke: Equatable, Sendable {

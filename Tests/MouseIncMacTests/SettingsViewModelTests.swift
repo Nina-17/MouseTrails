@@ -79,6 +79,27 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft.bindings[index].gesture, "LETTER_C")
     }
 
+    func testExportAndRestoreHandlersUpdateStatusAndDraft() {
+        var exported: AppConfiguration?
+        var replacement = AppConfiguration()
+        replacement.enabled = false
+        let model = SettingsViewModel(
+            configuration: AppConfiguration(),
+            saveHandler: { _ in },
+            exportHandler: { configuration, _ in exported = configuration },
+            restoreHandler: { _ in replacement }
+        )
+        let url = URL(fileURLWithPath: "/tmp/config.json")
+
+        model.export(to: url)
+        XCTAssertEqual(exported, model.draft)
+        XCTAssertEqual(model.saveMessage, "配置已导出")
+
+        model.restore(from: url)
+        XCTAssertFalse(model.draft.enabled)
+        XCTAssertEqual(model.saveMessage, "配置已恢复并生效")
+    }
+
     func testApplicationPickerRejectsNonApplicationURL() {
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
 

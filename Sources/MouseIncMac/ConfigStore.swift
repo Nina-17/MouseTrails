@@ -75,10 +75,36 @@ struct ConfigStore {
             withIntermediateDirectories: true
         )
 
+        let data = try encoded(configuration)
+        try data.write(to: fileURL, options: .atomic)
+    }
+
+    func export(_ configuration: AppConfiguration, to destinationURL: URL) throws {
+        try validate(configuration)
+        try encoded(configuration).write(to: destinationURL, options: .atomic)
+    }
+
+    func restore(from sourceURL: URL) throws -> AppConfiguration {
+        let sourceData = try Data(contentsOf: sourceURL)
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: sourceData)
+        try validate(configuration)
+
+        if fileManager.fileExists(atPath: fileURL.path) {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd-HHmmss"
+            let backupURL = fileURL.deletingLastPathComponent().appendingPathComponent(
+                "config.pre-restore-\(formatter.string(from: Date()))-\(UUID().uuidString).backup.json"
+            )
+            try fileManager.copyItem(at: fileURL, to: backupURL)
+        }
+        try save(configuration)
+        return configuration
+    }
+
+    private func encoded(_ configuration: AppConfiguration) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let data = try encoder.encode(configuration)
-        try data.write(to: fileURL, options: .atomic)
+        return try encoder.encode(configuration)
     }
 
     private func configurationVersion(in data: Data) -> Int? {
