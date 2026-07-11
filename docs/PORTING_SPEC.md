@@ -1,5 +1,7 @@
 # MouseInc macOS 移植规格
 
+> 本文档定义功能与技术边界；具体开发顺序、双轨分工和验收门槛见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
+
 ## 1. 目标
 
 在不复用 Win32 二进制的前提下，原生重现 MouseInc 的主要交互和可配置动作系统。优先保证手势输入可靠、不会吞掉普通右键，并尽量兼容现有 `MouseInc.json` 的概念与命名。
