@@ -155,6 +155,13 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         ) ?? ActionSequenceOptions()
         bindings = try container.decodeIfPresent([GestureBinding].self, forKey: .bindings)
             ?? GestureBinding.defaults
+        for bindingIndex in bindings.indices {
+            for actionIndex in bindings[bindingIndex].actions.indices
+            where bindings[bindingIndex].actions[actionIndex].type == .windowAction
+                && bindings[bindingIndex].actions[actionIndex].value == "restore" {
+                bindings[bindingIndex].actions[actionIndex].value = WindowAction.maximize.rawValue
+            }
+        }
     }
 
     public func encode(to encoder: Encoder) throws {

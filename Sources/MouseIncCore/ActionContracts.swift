@@ -10,9 +10,27 @@ public enum KeyStrokeModifier: String, Codable, CaseIterable, Sendable {
 public enum WindowAction: String, Codable, CaseIterable, Sendable {
     case center
     case maximize
-    case restore
     case minimize
     case close
+
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        if value == "restore" {
+            self = .maximize
+        } else if let action = Self(rawValue: value) {
+            self = action
+        } else {
+            throw DecodingError.dataCorruptedError(
+                in: try decoder.singleValueContainer(),
+                debugDescription: "Unsupported window action \(value)"
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 public struct ParsedKeyStroke: Equatable, Sendable {

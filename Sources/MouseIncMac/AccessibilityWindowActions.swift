@@ -10,10 +10,6 @@ enum AccessibilityWindowActions {
             return centerFrontmostWindow()
         case .maximize:
             return toggleFullScreen()
-        case .restore:
-            // Kept for schema-3 configuration compatibility. Full screen is a
-            // native toggle, so legacy restore actions perform the same shortcut.
-            return toggleFullScreen()
         case .minimize:
             return setBooleanAttribute(kAXMinimizedAttribute, value: true)
         case .close:

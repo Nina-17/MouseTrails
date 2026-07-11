@@ -3,6 +3,17 @@ import XCTest
 @testable import MouseIncCore
 
 final class AppConfigurationTests: XCTestCase {
+    func testLegacyRestoreActionMigratesToFullScreenToggle() throws {
+        let data = Data(
+            #"{"schemaVersion":3,"gestureOptions":{},"actionSequenceOptions":{},"bindings":[{"gesture":"UP","name":"Legacy","bundleIdentifiers":[],"actions":[{"type":"windowAction","value":"restore"}]}]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(configuration.bindings[0].actions[0].value, "maximize")
+        XCTAssertTrue(configuration.validate().isValid)
+    }
+
     func testDefaultsAreSafeAndPreserveExistingBehavior() {
         let configuration = AppConfiguration()
 

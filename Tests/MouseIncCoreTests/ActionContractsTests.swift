@@ -3,6 +3,14 @@ import XCTest
 @testable import MouseIncCore
 
 final class ActionContractsTests: XCTestCase {
+    func testLegacyRestoreWindowActionDecodesAsFullScreenToggle() throws {
+        let action = try JSONDecoder().decode(WindowAction.self, from: Data("\"restore\"".utf8))
+
+        XCTAssertEqual(action, .maximize)
+        XCTAssertEqual(String(data: try JSONEncoder().encode(action), encoding: .utf8), "\"maximize\"")
+        XCTAssertFalse(WindowAction.allCases.map(\.rawValue).contains("restore"))
+    }
+
     func testKeyStrokeParserNormalizesAliasesAndRejectsUnknownTokens() {
         XCTAssertEqual(
             KeyStrokeParser.parse("Cmd+Alt+Shift+C"),

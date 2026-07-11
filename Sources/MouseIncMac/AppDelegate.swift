@@ -27,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         loadConfiguration()
         configureStatusItem()
+        configureVisibilityFallback()
 
         let overlay = GestureOverlay()
         let executor = ActionExecutor()
@@ -176,6 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+        statusItem.autosaveName = "MouseIncMac.StatusItem"
         statusItem.isVisible = true
         self.statusItem = statusItem
         self.enabledItem = enabledItem
@@ -185,6 +187,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.monitorItem = monitorItem
         self.lastGestureItem = lastGestureItem
         updatePermissionMenus()
+    }
+
+    private func configureVisibilityFallback() {
+        let iceIsRunning = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == "com.jordanbaird.Ice"
+        }
+        guard iceIsRunning else { return }
+        NSApplication.shared.setActivationPolicy(.regular)
+        DiagnosticLogger.shared.log(
+            "Ice menu bar manager detected; Dock fallback enabled"
+        )
     }
 
     private func loadConfiguration() {
