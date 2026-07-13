@@ -259,7 +259,12 @@ final class GestureMonitor: NSObject {
         let detector = EdgeScrollDetector(inset: options.inset)
         guard let edge = detector.edge(at: NSEvent.mouseLocation, in: NSScreen.screens.map(\.frame)),
               edge == .left || edge == .right else { return }
-        edgeCooldown.interval = options.cooldown
+        // Trackpads emit a dense stream of continuous scroll events whereas a
+        // mouse wheel normally emits discrete ticks.  Keep one shared feature
+        // path, but pace continuous scrolling so it does not race to either
+        // endpoint while preserving the established mouse-wheel feel.
+        let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
+        edgeCooldown.interval = isContinuous ? max(options.cooldown, 0.25) : options.cooldown
         guard edgeCooldown.shouldFire(edge: edge, now: now) else { return }
         let succeeded = edgeScrollController.adjust(edge, by: delta > 0 ? 1 : -1, step: options.step)
         DiagnosticLogger.shared.log(
