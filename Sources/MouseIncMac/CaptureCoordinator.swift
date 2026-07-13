@@ -147,7 +147,11 @@ final class CaptureCoordinator: NSObject {
                 filter = SCContentFilter(display: display, excludingWindows: [])
             }
 
-            let scale = CGFloat(display.width) / max(screen.frame.width, 1)
+            // SCDisplay dimensions are logical points, not output pixels.  Use
+            // AppKit's backing scale so a Retina source region is requested at
+            // its native pixel resolution instead of being captured at 1× and
+            // later enlarged by the pinned image view.
+            let scale = screen.backingScaleFactor
             let configuration = SCStreamConfiguration()
             configuration.sourceRect = CGRect(
                 x: intersection.minX - screen.frame.minX,
@@ -173,6 +177,10 @@ final class CaptureCoordinator: NSObject {
                 )
             }
             segments.append(CapturedSegment(image: image, frame: intersection, scale: scale))
+            DiagnosticLogger.shared.log(
+                "Captured region at \(scale)x; " +
+                "output=\(image.width)x\(image.height)"
+            )
         }
 
         guard !segments.isEmpty else { throw CaptureError.noDisplay }
