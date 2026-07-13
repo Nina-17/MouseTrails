@@ -216,8 +216,6 @@ public extension AppConfiguration {
             message = OCRAction(rawValue: value) == nil ? "不支持的 OCR 操作" : nil
         case .searchSelectedText:
             message = value.contains("{query}") && URL(string: value.replacingOccurrences(of: "{query}", with: "query"))?.scheme != nil ? nil : "搜索 URL 必须包含 {query} 和有效 scheme"
-        case .openFocusedApplicationPath:
-            message = value.isEmpty ? nil : "此动作不需要参数"
         }
 
         if let message {

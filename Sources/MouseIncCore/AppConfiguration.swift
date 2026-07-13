@@ -350,7 +350,6 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case captureAction
         case ocrAction
         case searchSelectedText
-        case openFocusedApplicationPath
     }
 
     public var type: Kind

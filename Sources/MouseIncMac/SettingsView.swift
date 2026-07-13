@@ -180,9 +180,6 @@ struct SettingsView: View {
             .labelsHidden()
         } else if actionKind(binding: binding, action: action) == .searchSelectedText {
             TextField("搜索 URL 模板", text: actionValueBinding(binding: binding, action: action))
-        } else if actionKind(binding: binding, action: action) == .openFocusedApplicationPath {
-            Text("无需参数")
-                .foregroundStyle(.secondary)
         } else {
             let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
@@ -442,7 +439,6 @@ struct SettingsView: View {
         case .captureAction: CaptureAction.pinRegion.rawValue
         case .ocrAction: OCRAction.recognizeRegion.rawValue
         case .searchSelectedText: SearchSelectedTextAction.defaultURLTemplate
-        case .openFocusedApplicationPath: ""
         }
     }
 
