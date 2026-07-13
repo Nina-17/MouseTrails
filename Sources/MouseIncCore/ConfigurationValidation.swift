@@ -63,8 +63,7 @@ public extension AppConfiguration {
             ("startDistance", gestureOptions.startDistance, 0 ... 500),
             ("simplificationTolerance", gestureOptions.simplificationTolerance, 0 ... 500),
             ("minimumGestureLength", gestureOptions.minimumGestureLength, 1 ... 10_000),
-            ("maximumDuration", gestureOptions.maximumDuration, 0.1 ... 60),
-            ("continuationGrace", gestureOptions.continuationGrace, 0 ... 2)
+            ("maximumDuration", gestureOptions.maximumDuration, 0.1 ... 60)
         ]
         for (name, value, range) in values where !value.isFinite || !range.contains(value) {
             issues.append(

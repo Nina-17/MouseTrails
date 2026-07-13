@@ -20,8 +20,6 @@ final class GestureMonitor: NSObject {
     private var runLoopSource: CFRunLoopSource?
     private var session = GestureSession()
     private var timeoutTask: Task<Void, Never>?
-    private var continuationTask: Task<Void, Never>?
-    private var awaitingContinuation = false
     private var didLogDrag = false
     private var edgeCooldown = EdgeScrollCooldown()
 
@@ -47,7 +45,6 @@ final class GestureMonitor: NSObject {
 
     deinit {
         timeoutTask?.cancel()
-        continuationTask?.cancel()
     }
 
     func start() -> StartResult {
@@ -139,12 +136,6 @@ final class GestureMonitor: NSObject {
                 return Unmanaged.passUnretained(event)
             }
 
-            if awaitingContinuation, session.phase == .gesture {
-                cancelContinuation()
-                DiagnosticLogger.shared.log("Gesture continuation resumed")
-                return nil
-            }
-
             clearSession()
             let settings = GestureSession.Settings(
                 startDistance: options.startDistance,
@@ -172,8 +163,6 @@ final class GestureMonitor: NSObject {
                 return Unmanaged.passUnretained(event)
             }
 
-            cancelContinuation()
-
             let deltaX = CGFloat(event.getDoubleValueField(.mouseEventDeltaX))
             let deltaY = CGFloat(event.getDoubleValueField(.mouseEventDeltaY))
             if !didLogDrag {
@@ -195,11 +184,6 @@ final class GestureMonitor: NSObject {
         case .rightMouseUp:
             guard session.isActive else {
                 return Unmanaged.passUnretained(event)
-            }
-
-            if session.phase == .gesture, options.continuationGrace > 0 {
-                scheduleContinuation(after: options.continuationGrace)
-                return nil
             }
 
             finishActiveSession(configuration: configuration, options: options, now: now)
@@ -308,34 +292,6 @@ final class GestureMonitor: NSObject {
         }
     }
 
-    private func scheduleContinuation(after duration: TimeInterval) {
-        continuationTask?.cancel()
-        awaitingContinuation = true
-        let nanoseconds = UInt64(min(max(0, duration), 2) * 1_000_000_000)
-        continuationTask = Task { @MainActor [weak self] in
-            do {
-                try await Task.sleep(nanoseconds: nanoseconds)
-            } catch {
-                return
-            }
-            guard !Task.isCancelled, let self else { return }
-            self.awaitingContinuation = false
-            self.continuationTask = nil
-            let configuration = self.configurationProvider()
-            self.finishActiveSession(
-                configuration: configuration,
-                options: configuration.gestureOptions,
-                now: ProcessInfo.processInfo.systemUptime
-            )
-        }
-    }
-
-    private func cancelContinuation() {
-        continuationTask?.cancel()
-        continuationTask = nil
-        awaitingContinuation = false
-    }
-
     private func finishActiveSession(
         configuration: AppConfiguration,
         options: GestureOptions,
@@ -343,7 +299,6 @@ final class GestureMonitor: NSObject {
     ) {
         timeoutTask?.cancel()
         timeoutTask = nil
-        cancelContinuation()
         overlay.hide()
 
         switch session.finish(at: now) {
@@ -387,7 +342,6 @@ final class GestureMonitor: NSObject {
     private func expireActiveSession() {
         switch session.expire(at: ProcessInfo.processInfo.systemUptime) {
         case let .expired(replayOnMouseUp):
-            cancelContinuation()
             overlay.hide()
             logTimeout(replayOnMouseUp: replayOnMouseUp)
             timeoutTask = nil
@@ -415,7 +369,6 @@ final class GestureMonitor: NSObject {
     private func clearSession() {
         timeoutTask?.cancel()
         timeoutTask = nil
-        cancelContinuation()
         overlay.hide()
         session.reset()
         didLogDrag = false

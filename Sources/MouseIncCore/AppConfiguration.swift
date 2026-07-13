@@ -237,7 +237,6 @@ public struct GestureOptions: Codable, Equatable, Sendable {
     public var simplificationTolerance: Double
     public var minimumGestureLength: Double
     public var maximumDuration: TimeInterval
-    public var continuationGrace: TimeInterval
     public var showsTrail: Bool
     public var reportsFailures: Bool
 
@@ -247,7 +246,6 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         simplificationTolerance: Double = 18,
         minimumGestureLength: Double = 40,
         maximumDuration: TimeInterval = 5,
-        continuationGrace: TimeInterval = 0.8,
         showsTrail: Bool = true,
         reportsFailures: Bool = true
     ) {
@@ -256,7 +254,6 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         self.simplificationTolerance = simplificationTolerance
         self.minimumGestureLength = minimumGestureLength
         self.maximumDuration = maximumDuration
-        self.continuationGrace = continuationGrace
         self.showsTrail = showsTrail
         self.reportsFailures = reportsFailures
     }
@@ -267,7 +264,6 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         case simplificationTolerance
         case minimumGestureLength
         case maximumDuration
-        case continuationGrace
         case showsTrail
         case reportsFailures
     }
@@ -289,10 +285,6 @@ public struct GestureOptions: Codable, Equatable, Sendable {
             TimeInterval.self,
             forKey: .maximumDuration
         ) ?? defaults.maximumDuration
-        continuationGrace = try container.decodeIfPresent(
-            TimeInterval.self,
-            forKey: .continuationGrace
-        ) ?? defaults.continuationGrace
         showsTrail = try container.decodeIfPresent(Bool.self, forKey: .showsTrail) ?? defaults.showsTrail
         reportsFailures = try container.decodeIfPresent(
             Bool.self,
