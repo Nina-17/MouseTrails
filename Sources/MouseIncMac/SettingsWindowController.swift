@@ -6,6 +6,7 @@ import SwiftUI
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let model: SettingsViewModel
     private let navigation = SettingsNavigation()
+    private let launchAtLogin: LaunchAtLoginController
     private let closeHandler: @MainActor () -> Void
 
     init(
@@ -13,9 +14,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
         exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void,
         restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration,
+        launchAtLogin: LaunchAtLoginController,
         closeHandler: @escaping @MainActor () -> Void = {}
     ) {
         self.closeHandler = closeHandler
+        self.launchAtLogin = launchAtLogin
         model = SettingsViewModel(
             configuration: configuration,
             saveHandler: saveHandler,
@@ -23,7 +26,11 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             restoreHandler: restoreHandler
         )
         let hostingController = NSHostingController(
-            rootView: SettingsView(model: model, navigation: navigation)
+            rootView: SettingsView(
+                model: model,
+                navigation: navigation,
+                launchAtLogin: launchAtLogin
+            )
         )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "MouseTrails 设置"
@@ -47,6 +54,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             navigation.selectedPage = page
         }
         model.reload(configuration)
+        launchAtLogin.refresh()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)

@@ -5,15 +5,21 @@ import MouseIncCore
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let configStore = ConfigStore()
     private let captureCoordinator = CaptureCoordinator()
+    private let launchAtLogin = LaunchAtLoginController()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
+    private var launchAtLoginItem: NSMenuItem?
     private var permissionItem: NSMenuItem?
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
     private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        launchAtLogin.onStateChange = { [weak self] _ in
+            self?.updateLaunchAtLoginMenuItem()
+        }
+        launchAtLogin.refresh()
         let permissions = PermissionCoordinator.snapshot
         DiagnosticLogger.shared.log(
             event: .permissionSnapshot,
@@ -82,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        menu.delegate = self
 
         let enabledItem = NSMenuItem(
             title: "启用 MouseTrails",
@@ -92,6 +99,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabledItem.state = .off
         enabledItem.image = enabledStatusImage()
         menu.addItem(enabledItem)
+
+        let launchAtLoginItem = NSMenuItem(
+            title: "开机自启动 MouseTrails",
+            action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: ""
+        )
+        launchAtLoginItem.target = self
+        launchAtLoginItem.state = .off
+        menu.addItem(launchAtLoginItem)
 
         let lastGestureItem = NSMenuItem(title: "最近手势：无", action: nil, keyEquivalent: "")
         lastGestureItem.isEnabled = false
@@ -142,8 +158,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.isVisible = true
         self.statusItem = statusItem
         self.enabledItem = enabledItem
+        self.launchAtLoginItem = launchAtLoginItem
         self.permissionItem = permissionItem
         self.lastGestureItem = lastGestureItem
+        updateLaunchAtLoginMenuItem()
         updatePermissionMenus()
     }
 
@@ -231,15 +249,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func enabledStatusImage() -> NSImage? {
         guard configuration.enabled else { return nil }
-        return NSImage(
+        return statusCheckmarkImage()
+    }
+
+    private func statusCheckmarkImage() -> NSImage? {
+        NSImage(
             systemSymbolName: "checkmark",
-            accessibilityDescription: "已启用"
+            accessibilityDescription: nil
         )
     }
 
     private func updateEnabledMenuItem() {
         enabledItem?.state = .off
         enabledItem?.image = enabledStatusImage()
+    }
+
+    private func updateLaunchAtLoginMenuItem() {
+        launchAtLoginItem?.state = .off
+        launchAtLoginItem?.image = launchAtLogin.isEnabled ? statusCheckmarkImage() : nil
     }
 
     private func loadConfiguration() {
@@ -304,6 +331,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func toggleLaunchAtLogin() {
+        launchAtLogin.setEnabled(!launchAtLogin.isEnabled)
+        if let errorMessage = launchAtLogin.errorMessage {
+            presentError(title: "无法更新登录时启动", message: errorMessage)
+        }
+    }
+
     @objc private func openPermissions() {
         showSettings(page: .permissions)
     }
@@ -347,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.updatePermissionMenus()
                     return configuration
                 },
+                launchAtLogin: launchAtLogin,
                 closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }
@@ -372,5 +407,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = title
         alert.informativeText = message
         alert.runModal()
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        launchAtLogin.refresh()
     }
 }

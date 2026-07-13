@@ -7,6 +7,7 @@ struct SettingsView: View {
 
     @ObservedObject var model: SettingsViewModel
     @ObservedObject var navigation: SettingsNavigation
+    @ObservedObject var launchAtLogin: LaunchAtLoginController
     @State private var selectedBindingID: UUID?
 
     var body: some View {
@@ -117,6 +118,12 @@ struct SettingsView: View {
     private var gestureSection: some View {
         Section("手势") {
             Toggle("启用鼠标与触控板手势", isOn: $model.draft.gestureOptions.enabled)
+            Toggle("开机自启动 MouseTrails", isOn: launchAtLoginBinding)
+            if let errorMessage = launchAtLogin.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             Toggle("显示轨迹", isOn: $model.draft.gestureOptions.showsTrail)
             ColorPicker("轨迹颜色", selection: trailColorBinding, supportsOpacity: true)
             Toggle("报告识别失败", isOn: $model.draft.gestureOptions.reportsFailures)
@@ -156,6 +163,13 @@ struct SettingsView: View {
                     alpha: sRGB.alphaComponent
                 )
             }
+        )
+    }
+
+    private var launchAtLoginBinding: Binding<Bool> {
+        Binding(
+            get: { launchAtLogin.isEnabled },
+            set: { launchAtLogin.setEnabled($0) }
         )
     }
 
