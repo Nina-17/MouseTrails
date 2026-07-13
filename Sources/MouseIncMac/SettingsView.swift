@@ -217,10 +217,9 @@ struct SettingsView: View {
 
     private var pinnedImageHelpSection: some View {
         Section("贴图操作") {
-            Text("左键拖动；单击折叠或恢复；右键关闭")
-            Text("Option + 滚轮：调整透明度（20%–100%）")
-            Text("方向键：移动 1 点；Shift + 方向键：移动 10 点")
-            Text("Command+C：复制；Command+S：保存；Command+Shift+O：OCR")
+            Text("左键拖动；单击折叠或恢复；展开时右键关闭")
+            Text("光标停在贴图上时，滚轮或触控板双指滑动可调整透明度（20%–100%）")
+            Text("展开并选中贴图后，Command+C 可复制；缩小状态右键可另存为 PNG")
         }
     }
 

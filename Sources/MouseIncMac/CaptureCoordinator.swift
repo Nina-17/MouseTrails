@@ -206,16 +206,6 @@ final class CaptureCoordinator: NSObject {
             guard let self, let controller else { return }
             self.pinnedWindows.removeAll { $0 === controller }
         }
-        controller.onOCR = { [weak self] image in
-            Task { @MainActor [weak self] in
-                do {
-                    try await self?.recognizeAndCopy(image)
-                } catch {
-                    DiagnosticLogger.shared.log("Pinned image OCR failed")
-                    self?.presentError(title: "文字识别失败", message: error.localizedDescription)
-                }
-            }
-        }
         pinnedWindows.append(controller)
         controller.show()
     }
@@ -378,6 +368,7 @@ struct PinnedImageInteractionState: Equatable {
     private(set) var expandedFrame: CGRect
     private(set) var isCompact = false
     private(set) var opacity: CGFloat = 1
+    var allowsCopy: Bool { !isCompact }
 
     init(frame: CGRect) {
         self.frame = frame
@@ -428,9 +419,6 @@ private final class PinnedImagePanel: NSPanel {
 @MainActor
 private final class PinnedImageWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
-    var onOCR: ((CGImage) -> Void)? {
-        didSet { imageView?.onOCR = onOCR }
-    }
     private weak var imageView: PinnedImageView?
 
     init(image: CGImage, sourceRect: CGRect) {
@@ -446,7 +434,7 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
         )
         let panel = PinnedImagePanel(
             contentRect: CGRect(origin: origin, size: size),
-            styleMask: [.borderless, .resizable, .nonactivatingPanel],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -485,7 +473,6 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
 }
 
 private final class PinnedImageView: NSImageView {
-    var onOCR: ((CGImage) -> Void)?
     private let sourceImage: CGImage
     private var interactionState: PinnedImageInteractionState
 
@@ -506,7 +493,8 @@ private final class PinnedImageView: NSImageView {
 
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
-        window.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(self)
         interactionState.synchronize(with: window.frame)
         let initialMouse = NSEvent.mouseLocation
@@ -543,52 +531,29 @@ private final class PinnedImageView: NSImageView {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        window?.close()
+        if interactionState.isCompact {
+            saveImage()
+        } else {
+            window?.close()
+        }
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard event.modifierFlags.contains(.option), let window else {
-            super.scrollWheel(with: event)
-            return
-        }
+        guard let window else { return }
+        guard event.scrollingDeltaY != 0 else { return }
         let direction: CGFloat = event.scrollingDeltaY >= 0 ? 1 : -1
         interactionState.adjustOpacity(by: direction * 0.05)
         window.alphaValue = interactionState.opacity
     }
 
     override func keyDown(with event: NSEvent) {
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if modifiers.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased() {
-            switch key {
-            case "c":
-                copyImage()
-                return
-            case "s":
-                saveImage()
-                return
-            case "o" where modifiers.contains(.shift):
-                onOCR?(sourceImage)
-                return
-            default:
-                break
-            }
-        }
+        if handleCopyShortcut(event) { return }
+        super.keyDown(with: event)
+    }
 
-        let distance: CGFloat = modifiers.contains(.shift) ? 10 : 1
-        let delta: CGPoint
-        switch event.keyCode {
-        case 123: delta = CGPoint(x: -distance, y: 0)
-        case 124: delta = CGPoint(x: distance, y: 0)
-        case 125: delta = CGPoint(x: 0, y: -distance)
-        case 126: delta = CGPoint(x: 0, y: distance)
-        default:
-            super.keyDown(with: event)
-            return
-        }
-        guard let window else { return }
-        interactionState.synchronize(with: window.frame)
-        interactionState.moveBy(dx: delta.x, dy: delta.y)
-        window.setFrame(interactionState.frame, display: true)
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if handleCopyShortcut(event) { return true }
+        return super.performKeyEquivalent(with: event)
     }
 
     private func toggleCompact() {
@@ -604,6 +569,19 @@ private final class PinnedImageView: NSImageView {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.writeObjects([NSImage(cgImage: sourceImage, size: .zero)])
+    }
+
+    private func handleCopyShortcut(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard
+            interactionState.allowsCopy,
+            modifiers == .command,
+            event.charactersIgnoringModifiers?.lowercased() == "c"
+        else {
+            return false
+        }
+        copyImage()
+        return true
     }
 
     private func saveImage() {

@@ -34,4 +34,12 @@ final class PinnedImageInteractionTests: XCTestCase {
         state.adjustOpacity(by: 10)
         XCTAssertEqual(state.opacity, 1)
     }
+
+    func testOnlyExpandedStateIsEligibleForCopy() {
+        var state = PinnedImageInteractionState(frame: CGRect(x: 0, y: 0, width: 200, height: 100))
+        XCTAssertTrue(state.allowsCopy)
+
+        state.toggleCompact()
+        XCTAssertFalse(state.allowsCopy)
+    }
 }
