@@ -104,14 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         permissionItem.target = self
         menu.addItem(permissionItem)
 
-        let settingsItem = NSMenuItem(
-            title: "打开设置…",
-            action: #selector(openSettings),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
-
         let openConfigItem = NSMenuItem(
             title: "打开配置文件",
             action: #selector(openConfiguration),
@@ -135,6 +127,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
+
+        let settingsItem = NSMenuItem(
+            title: "打开设置…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         statusItem.menu = menu
         statusItem.autosaveName = "MouseIncMac.StatusItem"
