@@ -1,59 +1,91 @@
 import Foundation
 
-/// Recognizes a hand-drawn closed rectangle from scale-independent geometry.
-/// It deliberately does not inspect exact corners or compare against a stored
-/// template: screenshot gestures only need to follow all four sides reliably.
+public enum RectangleGestureDirection: String, Sendable {
+    case clockwise = "SQUARE_CLOCKWISE"
+    case counterclockwise = "SQUARE_COUNTERCLOCKWISE"
+}
+
+/// Recognizes three- or four-sided box gestures from their overall travel
+/// structure. Corners may be broad curves; closure and exact right angles are
+/// intentionally not required.
 public struct RectangleGestureRecognizer: Sendable {
     public init() {}
 
-    public func recognizes(_ points: [CGPoint]) -> Bool {
-        guard let sampled = resample(points, count: 64) else { return false }
+    public func recognize(_ points: [CGPoint]) -> RectangleGestureDirection? {
+        guard let sampled = resample(points, count: 64) else { return nil }
         let bounds = sampled.reduce(CGRect.null) {
             $0.union(CGRect(origin: $1, size: .zero))
         }
-        let width = bounds.width
-        let height = bounds.height
-        guard width > 0, height > 0, min(width, height) / max(width, height) >= 0.12 else {
-            return false
-        }
-
-        let diagonal = hypot(width, height)
-        guard distance(sampled[0], sampled[sampled.count - 1]) / diagonal <= 0.28 else {
-            return false
+        guard bounds.width > 0, bounds.height > 0,
+              min(bounds.width, bounds.height) / max(bounds.width, bounds.height) >= 0.1 else {
+            return nil
         }
 
         let normalized = sampled.map {
-            CGPoint(x: ($0.x - bounds.minX) / width, y: ($0.y - bounds.minY) / height)
-        }
-        let normalizedLength = pathLength(normalized)
-        let rectanglePerimeter = 4.0
-        guard (0.86 ... 1.45).contains(normalizedLength / rectanglePerimeter) else {
-            return false
+            CGPoint(
+                x: ($0.x - bounds.minX) / bounds.width,
+                y: ($0.y - bounds.minY) / bounds.height
+            )
         }
 
-        let sideTolerance = 0.14
-        var sideCoordinates = Array(repeating: [Double](), count: 4)
-        var pointsNearPerimeter = 0
-        for point in normalized {
+        guard coveredSideCount(normalized) >= 3,
+              perimeterResidence(normalized) >= 0.65,
+              orthogonalTrend(normalized) >= 0.15 else {
+            return nil
+        }
+
+        return signedArea(normalized) < 0 ? .clockwise : .counterclockwise
+    }
+
+    private func coveredSideCount(_ points: [CGPoint]) -> Int {
+        let tolerance = 0.28
+        var coordinates = Array(repeating: [Double](), count: 4)
+        for point in points {
             let distances = [point.y, 1 - point.x, 1 - point.y, point.x]
-            guard let nearest = distances.indices.min(by: { distances[$0] < distances[$1] }) else {
-                continue
-            }
-            if distances[nearest] <= sideTolerance {
-                pointsNearPerimeter += 1
-                sideCoordinates[nearest].append(nearest.isMultiple(of: 2) ? point.x : point.y)
-            }
+            guard let side = distances.indices.min(by: { distances[$0] < distances[$1] }),
+                  distances[side] <= tolerance else { continue }
+            coordinates[side].append(side.isMultiple(of: 2) ? point.x : point.y)
         }
-
-        guard Double(pointsNearPerimeter) / Double(normalized.count) >= 0.72 else {
-            return false
-        }
-        return sideCoordinates.allSatisfy { coordinates in
-            guard let minimum = coordinates.min(), let maximum = coordinates.max() else {
+        return coordinates.filter { values in
+            guard values.count >= 4, let minimum = values.min(), let maximum = values.max() else {
                 return false
             }
-            return maximum - minimum >= 0.68
+            return maximum - minimum >= 0.42
+        }.count
+    }
+
+    private func perimeterResidence(_ points: [CGPoint]) -> Double {
+        let nearCount = points.filter { point in
+            [point.x, 1 - point.x, point.y, 1 - point.y].min()! <= 0.28
+        }.count
+        return Double(nearCount) / Double(points.count)
+    }
+
+    /// Fourfold tangent coherence is high when movement follows two broad,
+    /// perpendicular trends, regardless of rotation. Curved corners merely
+    /// lower the score instead of failing an angle check.
+    private func orthogonalTrend(_ points: [CGPoint]) -> Double {
+        var cosine = 0.0
+        var sine = 0.0
+        var totalWeight = 0.0
+        for (start, end) in zip(points, points.dropFirst()) {
+            let dx = end.x - start.x
+            let dy = end.y - start.y
+            let weight = hypot(dx, dy)
+            guard weight > 0 else { continue }
+            let angle = atan2(dy, dx) * 4
+            cosine += cos(angle) * weight
+            sine += sin(angle) * weight
+            totalWeight += weight
         }
+        guard totalWeight > 0 else { return 0 }
+        return hypot(cosine, sine) / totalWeight
+    }
+
+    private func signedArea(_ points: [CGPoint]) -> Double {
+        zip(points, points.dropFirst() + [points[0]]).reduce(0) { area, pair in
+            area + pair.0.x * pair.1.y - pair.1.x * pair.0.y
+        } / 2
     }
 
     private func resample(_ points: [CGPoint], count: Int) -> [CGPoint]? {
