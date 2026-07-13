@@ -24,6 +24,10 @@ final class GestureOverlay {
         panel.contentView = traceView
     }
 
+    var captureWindowID: CGWindowID {
+        CGWindowID(panel.windowNumber)
+    }
+
     func show(points: [CGPoint], color: GestureTrailColor) {
         guard points.count > 1, let firstPoint = points.first else {
             hide()
@@ -46,9 +50,12 @@ final class GestureOverlay {
     }
 
     func hide() {
-        panel.orderOut(nil)
         traceView.points = []
         traceView.needsDisplay = true
+        // Clear the backing surface before hiding the panel. This prevents a
+        // one-frame stale trail from being composited into a region capture.
+        traceView.displayIfNeeded()
+        panel.orderOut(nil)
     }
 
     private func screen(containing point: CGPoint) -> NSScreen? {

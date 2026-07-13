@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureVisibilityFallback()
 
         let overlay = GestureOverlay()
+        captureCoordinator.setGestureOverlay(overlay)
         let executor = ActionExecutor(captureActionHandler: { [weak self] action, gestureBounds in
             self?.captureCoordinator.perform(action, gestureBounds: gestureBounds) ?? false
         }, ocrActionHandler: { [weak self] action, gestureBounds in

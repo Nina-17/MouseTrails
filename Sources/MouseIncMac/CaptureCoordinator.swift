@@ -11,7 +11,12 @@ import UniformTypeIdentifiers
 final class CaptureCoordinator: NSObject {
     private var pinnedWindows: [PinnedImageWindowController] = []
     private weak var selectedPinnedWindow: PinnedImageWindowController?
+    private weak var gestureOverlay: GestureOverlay?
     private let notificationCoordinator = UserNotificationCoordinator()
+
+    func setGestureOverlay(_ overlay: GestureOverlay) {
+        gestureOverlay = overlay
+    }
 
     func perform(_ action: CaptureAction, gestureBounds: CGRect?) -> Bool {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
@@ -117,8 +122,10 @@ final class CaptureCoordinator: NSObject {
     private func captureImage(in rect: CGRect) async throws -> CGImage {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
-            onScreenWindowsOnly: true
+            onScreenWindowsOnly: false
         )
+        let overlayWindowID = gestureOverlay?.captureWindowID
+        let excludedWindows = content.windows.filter { $0.windowID == overlayWindowID }
 
         var segments: [CapturedSegment] = []
         for screen in NSScreen.screens {
@@ -134,11 +141,10 @@ final class CaptureCoordinator: NSObject {
             }
 
             // Capture the same composited content the user sees, including
-            // MouseTrails' settings and pinned-image windows. The gesture
-            // overlay is ordered out before actions execute, so excluding the
-            // entire application would only make its normal windows appear
-            // transparent and expose whatever is behind them.
-            let filter = SCContentFilter(display: display, excludingWindows: [])
+            // MouseTrails' settings and pinned-image windows. Exclude only
+            // the transparent gesture overlay so a pending WindowServer frame
+            // cannot become part of a screenshot or pinned image.
+            let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
 
             // SCDisplay dimensions are logical points, not output pixels.  Use
             // AppKit's backing scale so a Retina source region is requested at
