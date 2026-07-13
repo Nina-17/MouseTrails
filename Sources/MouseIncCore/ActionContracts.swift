@@ -33,6 +33,12 @@ public enum WindowAction: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum CaptureAction: String, Codable, CaseIterable, Sendable {
+    case pinRegion
+    case copyRegion
+    case saveRegion
+}
+
 public struct ParsedKeyStroke: Equatable, Sendable {
     public var modifiers: Set<KeyStrokeModifier>
     public var key: String
@@ -136,6 +142,23 @@ public enum ActionCatalog {
                 valueDescription: "例如 center",
                 requiredPermissions: [.accessibility]
             )
+        case .captureAction:
+            ActionDescriptor(
+                kind: .captureAction,
+                displayName: "截图与贴图",
+                valueDescription: "框选后贴图、复制或保存",
+                requiredPermissions: [.screenRecording]
+            )
+        }
+    }
+}
+
+public extension AppConfiguration {
+    var requiredPermissions: Set<SystemPermission> {
+        bindings.reduce(into: Set<SystemPermission>()) { permissions, binding in
+            for action in binding.actions {
+                permissions.formUnion(ActionCatalog.descriptor(for: action.type).requiredPermissions)
+            }
         }
     }
 }

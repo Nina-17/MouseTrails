@@ -5,20 +5,24 @@ import MouseIncCore
 final class ActionExecutor {
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
+    typealias CaptureActionHandler = @MainActor (CaptureAction) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
     private let eventLogger: EventLogger
     private let windowActionHandler: WindowActionHandler
+    private let captureActionHandler: CaptureActionHandler
 
     init(
         eventLogger: @escaping EventLogger = { event, metadata in
             DiagnosticLogger.shared.log(event: event, metadata: metadata)
         },
-        windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform
+        windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
+        captureActionHandler: @escaping CaptureActionHandler = { _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
+        self.captureActionHandler = captureActionHandler
     }
 
     var isExecuting: Bool {
@@ -98,6 +102,9 @@ final class ActionExecutor {
         case .windowAction:
             guard let windowAction = WindowAction(rawValue: action.value) else { return false }
             return windowActionHandler(windowAction)
+        case .captureAction:
+            guard let captureAction = CaptureAction(rawValue: action.value) else { return false }
+            return captureActionHandler(captureAction)
         }
     }
 

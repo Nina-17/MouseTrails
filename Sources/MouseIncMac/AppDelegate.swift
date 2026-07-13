@@ -4,6 +4,7 @@ import MouseIncCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let configStore = ConfigStore()
+    private let captureCoordinator = CaptureCoordinator()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
@@ -30,7 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureVisibilityFallback()
 
         let overlay = GestureOverlay()
-        let executor = ActionExecutor()
+        let executor = ActionExecutor(captureActionHandler: { [weak self] action in
+            self?.captureCoordinator.perform(action) ?? false
+        })
         let monitor = GestureMonitor(
             configuration: { [weak self] in self?.configuration ?? AppConfiguration() },
             overlay: overlay,
@@ -111,10 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let screenRecordingPermissionItem = NSMenuItem(
             title: "屏幕录制权限：未使用",
-            action: nil,
+            action: #selector(requestScreenRecordingPermission),
             keyEquivalent: ""
         )
-        screenRecordingPermissionItem.isEnabled = false
+        screenRecordingPermissionItem.target = self
         menu.addItem(screenRecordingPermissionItem)
 
         let inputMonitoringPermissionItem = NSMenuItem(
@@ -238,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenRecordingPermissionItem?.title = permissionTitle(
             name: "屏幕录制",
             state: permissions[.screenRecording],
-            currentlyRequired: false
+            currentlyRequired: configuration.requiredPermissions.contains(.screenRecording)
         )
         inputMonitoringPermissionItem?.title = permissionTitle(
             name: "输入监控",
@@ -301,6 +304,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    @objc private func requestScreenRecordingPermission() {
+        if !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+        }
+        updatePermissionMenus()
+    }
+
     @objc private func openConfiguration() {
         do {
             _ = try configStore.loadOrCreate()
@@ -320,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.configuration = configuration
                     self.enabledItem?.state = configuration.enabled ? .on : .off
                     self.lastGestureItem?.title = "最近手势：配置已保存"
+                    self.updatePermissionMenus()
                 },
                 exportHandler: { [weak self] configuration, url in
                     guard let self else { return }
@@ -331,6 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.configuration = configuration
                     self.enabledItem?.state = configuration.enabled ? .on : .off
                     self.lastGestureItem?.title = "最近手势：配置已恢复"
+                    self.updatePermissionMenus()
                     return configuration
                 }
             )

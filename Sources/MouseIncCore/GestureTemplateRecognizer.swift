@@ -135,6 +135,10 @@ public struct GestureTemplateRecognizer: Sendable {
 
 public extension GestureTemplate {
     static let builtIns: [GestureTemplate] = [
+        GestureTemplate(identifier: "SQUARE", points: polyline([
+            CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1),
+            CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1)
+        ])),
         GestureTemplate(identifier: "CIRCLE", points: circlePoints()),
         GestureTemplate(identifier: "LETTER_C", points: arcPoints(from: .pi / 4, to: .pi * 7 / 4)),
         GestureTemplate(identifier: "LETTER_M", points: polyline([

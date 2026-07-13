@@ -150,6 +150,13 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
+        } else if actionKind(binding: binding, action: action) == .captureAction {
+            Picker("截图动作", selection: actionValueBinding(binding: binding, action: action)) {
+                ForEach(CaptureAction.allCases, id: \.self) { value in
+                    Text(captureActionName(value)).tag(value.rawValue)
+                }
+            }
+            .labelsHidden()
         } else {
             let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
@@ -175,9 +182,13 @@ struct SettingsView: View {
         let snapshot = PermissionCoordinator.snapshot
         return Section("权限") {
             permissionRow("辅助功能", state: snapshot[.accessibility], required: true)
-            permissionRow("屏幕录制", state: snapshot[.screenRecording], required: false)
+            permissionRow(
+                "屏幕录制",
+                state: snapshot[.screenRecording],
+                required: model.draft.requiredPermissions.contains(.screenRecording)
+            )
             permissionRow("输入监控", state: snapshot[.inputMonitoring], required: false)
-            Text("当前手势与窗口动作只需要辅助功能权限。")
+            Text("截图与贴图首次使用时才请求屏幕录制权限；拒绝不会影响手势和窗口动作。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -367,6 +378,7 @@ struct SettingsView: View {
     private var templateGestureChoices: [(String, String)] {
         [
             ("CIRCLE", "圆形"),
+            ("SQUARE", "方框（截图/贴图）"),
             ("LETTER_C", "字母 C"),
             ("LETTER_M", "字母 M"),
             ("LETTER_Z", "字母 Z")
@@ -394,6 +406,15 @@ struct SettingsView: View {
         case .launchApplication: "com.apple.finder"
         case .delay: "0.2"
         case .windowAction: WindowAction.center.rawValue
+        case .captureAction: CaptureAction.pinRegion.rawValue
+        }
+    }
+
+    private func captureActionName(_ action: CaptureAction) -> String {
+        switch action {
+        case .pinRegion: return "框选并生成贴图"
+        case .copyRegion: return "框选并复制"
+        case .saveRegion: return "框选并保存"
         }
     }
 }

@@ -28,9 +28,33 @@ final class ActionContractsTests: XCTestCase {
         )
         XCTAssertEqual(ActionCatalog.descriptor(for: .delay).requiredPermissions, [])
         XCTAssertEqual(
+            ActionCatalog.descriptor(for: .captureAction).requiredPermissions,
+            [.screenRecording]
+        )
+        XCTAssertEqual(
             Set(ActionCatalog.descriptors.map(\.kind)),
             Set(ActionDefinition.Kind.allCases)
         )
+    }
+
+    func testCaptureActionsValidateKnownValues() {
+        let valid = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "SQUARE",
+                name: "截图贴图",
+                actions: [.init(type: .captureAction, value: CaptureAction.pinRegion.rawValue)]
+            )
+        ])
+        XCTAssertTrue(valid.validate().isValid)
+
+        let invalid = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "SQUARE",
+                name: "无效截图",
+                actions: [.init(type: .captureAction, value: "unknown")]
+            )
+        ])
+        XCTAssertFalse(invalid.validate().isValid)
     }
 
     func testPermissionSnapshotEvaluatesIndependentPermissions() {
