@@ -407,8 +407,7 @@ struct SettingsView: View {
     private var templateGestureChoices: [(String, String)] {
         [
             ("CIRCLE", "圆形"),
-            ("SQUARE_CLOCKWISE", "顺时针方框"),
-            ("SQUARE_COUNTERCLOCKWISE", "逆时针方框"),
+            ("SQUARE", "方框（截图/贴图）"),
             ("LETTER_C", "字母 C"),
             ("LETTER_M", "字母 M"),
             ("LETTER_Z", "字母 Z")

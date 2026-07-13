@@ -14,8 +14,8 @@ public struct GestureRecognizer: Sendable {
             return nil
         }
 
-        if let rectangle = RectangleGestureRecognizer().recognize(points) {
-            return rectangle.rawValue
+        if RectangleGestureRecognizer().recognizes(points) {
+            return "SQUARE"
         }
 
         let simplified = simplify(points, tolerance: simplificationTolerance)
