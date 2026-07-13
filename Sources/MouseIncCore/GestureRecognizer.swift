@@ -14,6 +14,10 @@ public struct GestureRecognizer: Sendable {
             return nil
         }
 
+        if RectangleGestureRecognizer().recognizes(points) {
+            return "SQUARE"
+        }
+
         let simplified = simplify(points, tolerance: simplificationTolerance)
         guard simplified.count >= 2 else { return nil }
 
