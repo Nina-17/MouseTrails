@@ -171,6 +171,12 @@ public enum ActionCatalog {
                 valueDescription: "搜索 URL 模板，使用 {query}",
                 requiredPermissions: [.accessibility]
             )
+        case .openFocusedApplicationPath:
+            ActionDescriptor(
+                kind: .openFocusedApplicationPath,
+                displayName: "打开当前前台 App 路径",
+                valueDescription: "无需参数"
+            )
         }
     }
 }

@@ -16,6 +16,7 @@ final class ActionExecutor {
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
     typealias SearchSelectedTextHandler = @MainActor (String) -> Bool
+    typealias OpenFocusedApplicationPathHandler = @MainActor () -> Bool
     typealias KeyStrokeHandler = @MainActor (ParsedKeyStroke) -> Bool
 
     private var executionTask: Task<Void, Never>?
@@ -25,6 +26,7 @@ final class ActionExecutor {
     private let captureActionHandler: CaptureActionHandler
     private let ocrActionHandler: OCRActionHandler
     private let searchSelectedTextHandler: SearchSelectedTextHandler
+    private let openFocusedApplicationPathHandler: OpenFocusedApplicationPathHandler
     private let keyStrokeHandler: KeyStrokeHandler
 
     init(
@@ -35,6 +37,7 @@ final class ActionExecutor {
         captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
         ocrActionHandler: @escaping OCRActionHandler = { _, _ in false },
         searchSelectedTextHandler: @escaping SearchSelectedTextHandler = { _ in false },
+        openFocusedApplicationPathHandler: @escaping OpenFocusedApplicationPathHandler = { false },
         keyStrokeHandler: @escaping KeyStrokeHandler = { _ in false }
     ) {
         self.eventLogger = eventLogger
@@ -42,6 +45,7 @@ final class ActionExecutor {
         self.captureActionHandler = captureActionHandler
         self.ocrActionHandler = ocrActionHandler
         self.searchSelectedTextHandler = searchSelectedTextHandler
+        self.openFocusedApplicationPathHandler = openFocusedApplicationPathHandler
         self.keyStrokeHandler = keyStrokeHandler
     }
 
@@ -131,6 +135,8 @@ final class ActionExecutor {
             return ocrActionHandler(ocrAction, context.gestureBounds)
         case .searchSelectedText:
             return searchSelectedTextHandler(action.value)
+        case .openFocusedApplicationPath:
+            return openFocusedApplicationPathHandler()
         }
     }
 

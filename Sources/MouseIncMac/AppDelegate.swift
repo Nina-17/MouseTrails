@@ -37,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.captureCoordinator.performOCR(action, gestureBounds: gestureBounds) ?? false
         }, searchSelectedTextHandler: { value in
             SelectedTextSearch.perform(urlTemplate: value)
+        }, openFocusedApplicationPathHandler: {
+            FocusedApplicationPath.open()
         }, keyStrokeHandler: { [weak self] keyStroke in
             self?.captureCoordinator.copySelectedPinnedImage(for: keyStroke) ?? false
         })
