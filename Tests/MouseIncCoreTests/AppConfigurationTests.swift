@@ -23,7 +23,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.gestureOptions.simplificationTolerance, 18)
         XCTAssertEqual(configuration.gestureOptions.minimumGestureLength, 40)
         XCTAssertEqual(configuration.gestureOptions.maximumDuration, 5)
-        XCTAssertEqual(configuration.gestureOptions.continuationGrace, 0.35)
+        XCTAssertEqual(configuration.gestureOptions.continuationGrace, 0.8)
         XCTAssertTrue(configuration.gestureOptions.showsTrail)
         XCTAssertTrue(configuration.gestureOptions.reportsFailures)
         XCTAssertEqual(configuration.actionSequenceOptions, ActionSequenceOptions())

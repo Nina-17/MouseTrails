@@ -247,7 +247,7 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         simplificationTolerance: Double = 18,
         minimumGestureLength: Double = 40,
         maximumDuration: TimeInterval = 5,
-        continuationGrace: TimeInterval = 0.35,
+        continuationGrace: TimeInterval = 0.8,
         showsTrail: Bool = true,
         reportsFailures: Bool = true
     ) {
