@@ -15,6 +15,7 @@ final class ActionExecutor {
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
+    typealias KeyStrokeHandler = @MainActor (ParsedKeyStroke) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
@@ -22,6 +23,7 @@ final class ActionExecutor {
     private let windowActionHandler: WindowActionHandler
     private let captureActionHandler: CaptureActionHandler
     private let ocrActionHandler: OCRActionHandler
+    private let keyStrokeHandler: KeyStrokeHandler
 
     init(
         eventLogger: @escaping EventLogger = { event, metadata in
@@ -29,12 +31,14 @@ final class ActionExecutor {
         },
         windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
         captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
-        ocrActionHandler: @escaping OCRActionHandler = { _, _ in false }
+        ocrActionHandler: @escaping OCRActionHandler = { _, _ in false },
+        keyStrokeHandler: @escaping KeyStrokeHandler = { _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
         self.captureActionHandler = captureActionHandler
         self.ocrActionHandler = ocrActionHandler
+        self.keyStrokeHandler = keyStrokeHandler
     }
 
     var isExecuting: Bool {
@@ -164,6 +168,10 @@ final class ActionExecutor {
             let keyCode = KeyMap.code(for: keyStroke.key)
         else {
             return false
+        }
+
+        if keyStrokeHandler(keyStroke) {
+            return true
         }
 
         var flags: CGEventFlags = []

@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class CaptureCoordinator: NSObject {
     private var pinnedWindows: [PinnedImageWindowController] = []
+    private weak var selectedPinnedWindow: PinnedImageWindowController?
     private let notificationCoordinator = UserNotificationCoordinator()
 
     func perform(_ action: CaptureAction, gestureBounds: CGRect?) -> Bool {
@@ -56,6 +57,16 @@ final class CaptureCoordinator: NSObject {
         }
         DiagnosticLogger.shared.log("OCR started from gesture bounds")
         return true
+    }
+
+    func copySelectedPinnedImage(for keyStroke: ParsedKeyStroke) -> Bool {
+        guard
+            keyStroke.key == "c",
+            keyStroke.modifiers == [.command]
+        else {
+            return false
+        }
+        return selectedPinnedWindow?.copyImageIfExpanded() ?? false
     }
 
     private func capture(rect: CGRect, action: CaptureAction) async {
@@ -205,8 +216,15 @@ final class CaptureCoordinator: NSObject {
         controller.onClose = { [weak self, weak controller] in
             guard let self, let controller else { return }
             self.pinnedWindows.removeAll { $0 === controller }
+            if self.selectedPinnedWindow === controller {
+                self.selectedPinnedWindow = nil
+            }
+        }
+        controller.onSelected = { [weak self, weak controller] in
+            self?.selectedPinnedWindow = controller
         }
         pinnedWindows.append(controller)
+        selectedPinnedWindow = controller
         controller.show()
     }
 
@@ -419,6 +437,7 @@ private final class PinnedImagePanel: NSPanel {
 @MainActor
 private final class PinnedImageWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
+    var onSelected: (() -> Void)?
     private weak var imageView: PinnedImageView?
 
     init(image: CGImage, sourceRect: CGRect) {
@@ -452,6 +471,9 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
         panel.contentView = imageView
         super.init(window: panel)
         self.imageView = imageView
+        imageView.onSelected = { [weak self] in
+            self?.onSelected?()
+        }
         panel.delegate = self
     }
 
@@ -470,9 +492,14 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
     func windowWillClose(_ notification: Notification) {
         onClose?()
     }
+
+    func copyImageIfExpanded() -> Bool {
+        imageView?.copyImageIfExpanded() ?? false
+    }
 }
 
 private final class PinnedImageView: NSImageView {
+    var onSelected: (() -> Void)?
     private let sourceImage: CGImage
     private var interactionState: PinnedImageInteractionState
 
@@ -496,6 +523,7 @@ private final class PinnedImageView: NSImageView {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(self)
+        onSelected?()
         interactionState.synchronize(with: window.frame)
         let initialMouse = NSEvent.mouseLocation
         let initialOrigin = window.frame.origin
@@ -565,10 +593,45 @@ private final class PinnedImageView: NSImageView {
         window.setFrame(interactionState.frame, display: true, animate: true)
     }
 
-    private func copyImage() {
+    func copyImageIfExpanded() -> Bool {
+        guard interactionState.allowsCopy else { return false }
+        guard let pngData = NSBitmapImageRep(cgImage: sourceImage)
+            .representation(using: .png, properties: [:]) else {
+            return false
+        }
+
+        let item = NSPasteboardItem()
+        item.setData(pngData, forType: .png)
+        if let tiffData = NSImage(
+            cgImage: sourceImage,
+            size: NSSize(width: sourceImage.width, height: sourceImage.height)
+        ).tiffRepresentation {
+            item.setData(tiffData, forType: .tiff)
+        }
+
+        do {
+            let fileURL = try writeClipboardPNG(pngData)
+            item.setString(fileURL.absoluteString, forType: .fileURL)
+        } catch {
+            DiagnosticLogger.shared.log("Pinned image clipboard file failed: \(error.localizedDescription)")
+        }
+
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.writeObjects([NSImage(cgImage: sourceImage, size: .zero)])
+        return pasteboard.writeObjects([item])
+    }
+
+    private func writeClipboardPNG(_ data: Data) throws -> URL {
+        let root = try FileManager.default.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ).appendingPathComponent("MouseIncMac/PinnedClipboard", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("MouseIncMac-贴图-\(UUID().uuidString).png")
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     private func handleCopyShortcut(_ event: NSEvent) -> Bool {
@@ -580,8 +643,7 @@ private final class PinnedImageView: NSImageView {
         else {
             return false
         }
-        copyImage()
-        return true
+        return copyImageIfExpanded()
     }
 
     private func saveImage() {

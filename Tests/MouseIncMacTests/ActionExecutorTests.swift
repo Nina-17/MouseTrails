@@ -134,6 +134,26 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(executor.isExecuting)
     }
 
+    func testCommandCCanBeHandledBySelectedPinnedImage() async throws {
+        var receivedKeyStroke: ParsedKeyStroke?
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            keyStrokeHandler: { keyStroke in
+                receivedKeyStroke = keyStroke
+                return true
+            }
+        )
+
+        executor.execute([.init(type: .keyStroke, value: "Command+C")])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(
+            receivedKeyStroke,
+            ParsedKeyStroke(modifiers: [.command], key: "c")
+        )
+        XCTAssertFalse(executor.isExecuting)
+    }
+
     private func makeExecutor() -> ActionExecutor {
         ActionExecutor(
             eventLogger: { _, _ in },

@@ -219,7 +219,7 @@ struct SettingsView: View {
         Section("贴图操作") {
             Text("左键拖动；单击折叠或恢复；展开时右键关闭")
             Text("光标停在贴图上时，滚轮或触控板双指滑动可调整透明度（20%–100%）")
-            Text("展开并选中贴图后，Command+C 可复制；缩小状态右键可另存为 PNG")
+            Text("展开并选中贴图后，Command+C 可复制图像或在 Finder 中粘贴 PNG；缩小状态右键可另存为 PNG")
         }
     }
 
