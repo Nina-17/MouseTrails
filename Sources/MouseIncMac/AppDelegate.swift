@@ -80,8 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 accessibilityDescription: "MouseTrails"
             )
             button.image?.isTemplate = true
-            button.imagePosition = .imageLeading
-            button.title = "MT"
+            button.imagePosition = .imageOnly
+            button.title = ""
             button.toolTip = "MouseTrails"
         }
 
