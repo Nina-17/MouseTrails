@@ -3,6 +3,8 @@ import SwiftUI
 import AppKit
 
 struct SettingsView: View {
+    private static let standardContentWidth: CGFloat = 720
+
     @ObservedObject var model: SettingsViewModel
     @State private var selectedPage: SettingsPage = .general
     @State private var selectedBindingID: UUID?
@@ -24,25 +26,28 @@ struct SettingsView: View {
                 saveBar
             }
         }
-        .frame(minWidth: 920, minHeight: 680)
+        .frame(minWidth: 820, minHeight: 620)
         .onAppear { selectFirstBindingIfNeeded() }
         .onChange(of: model.bindingIDs) { _ in selectFirstBindingIfNeeded() }
     }
 
     private var pageHeader: some View {
-        HStack(spacing: 14) {
-            Image(systemName: selectedPage.systemImage)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.tint)
-                .frame(width: 34)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(selectedPage.title)
-                    .font(.title2.weight(.semibold))
-                Text(selectedPage.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        HStack {
+            HStack(spacing: 14) {
+                Image(systemName: selectedPage.systemImage)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 34)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(selectedPage.title)
+                        .font(.title2.weight(.semibold))
+                    Text(selectedPage.subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
             }
-            Spacer()
+            .frame(maxWidth: contentColumnWidth, alignment: .leading)
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 18)
@@ -83,23 +88,30 @@ struct SettingsView: View {
     private var saveBar: some View {
         VStack(spacing: 0) {
             Divider()
-            HStack(spacing: 10) {
-                Image(systemName: model.canSave ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(model.canSave ? Color.green : Color.red)
-                Text(model.saveMessage ?? (model.canSave ? "配置有效" : "请修复配置错误"))
-                    .foregroundStyle(model.canSave ? Color.secondary : Color.red)
-                Spacer()
-                Text("Schema \(AppConfiguration.currentSchemaVersion)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-                Button("保存并应用") { model.save() }
-                    .keyboardShortcut("s", modifiers: .command)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!model.canSave)
+            HStack {
+                HStack(spacing: 10) {
+                    Image(systemName: model.canSave ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(model.canSave ? Color.green : Color.red)
+                    Text(model.saveMessage ?? (model.canSave ? "配置有效" : "请修复配置错误"))
+                        .foregroundStyle(model.canSave ? Color.secondary : Color.red)
+                    Spacer()
+                    Text("Schema \(AppConfiguration.currentSchemaVersion)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                    Button("保存并应用") { model.save() }
+                        .keyboardShortcut("s", modifiers: .command)
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!model.canSave)
+                }
+                .frame(maxWidth: contentColumnWidth)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
+    }
+
+    private var contentColumnWidth: CGFloat {
+        selectedPage == .bindings ? .infinity : Self.standardContentWidth
     }
 
     private var gestureSection: some View {
@@ -160,52 +172,105 @@ struct SettingsView: View {
     }
 
     private var bindingsWorkspace: some View {
-        HSplitView {
-            VStack(spacing: 0) {
-                List(selection: $selectedBindingID) {
-                    ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
-                        bindingListRow(at: index)
-                            .tag(id)
-                    }
+        GeometryReader { geometry in
+            if geometry.size.width < 760 {
+                VStack(spacing: 0) {
+                    compactBindingSelector
+                    Divider()
+                    bindingDetailPane
                 }
-                .listStyle(.sidebar)
-
-                Divider()
-                HStack {
-                    Button {
-                        model.addBinding()
-                        selectedBindingID = model.bindingIDs.last
-                    } label: {
-                        Label("添加", systemImage: "plus")
-                    }
-                    Spacer()
-                    Text("\(model.draft.bindings.count) 个绑定")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-            }
-            .frame(minWidth: 240, idealWidth: 270, maxWidth: 320)
-
-            if let index = selectedBindingIndex {
-                ScrollView {
-                    bindingEditor(at: index)
-                        .padding(24)
-                        .frame(maxWidth: 760, alignment: .topLeading)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "scribble.variable")
-                        .font(.system(size: 42))
-                        .foregroundStyle(.tertiary)
-                    Text("选择一个手势绑定")
-                        .font(.title3.weight(.medium))
-                    Text("从左侧选择绑定，或添加一个新的手势。")
-                        .foregroundStyle(.secondary)
+                HSplitView {
+                    bindingListPane
+                        .frame(minWidth: 240, idealWidth: 270, maxWidth: 320)
+                    bindingDetailPane
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    private var compactBindingSelector: some View {
+        HStack(spacing: 10) {
+            if let index = selectedBindingIndex, let binding = model.binding(at: index) {
+                GesturePreview(identifier: binding.gesture)
+                    .frame(width: 46, height: 34)
+                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
+            }
+
+            Picker("当前绑定", selection: $selectedBindingID) {
+                ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
+                    Text(model.binding(at: index)?.name ?? "未命名手势")
+                        .tag(Optional(id))
+                }
+            }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
+
+            Text("\(model.draft.bindings.count) 个")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button {
+                model.addBinding()
+                selectedBindingID = model.bindingIDs.last
+            } label: {
+                Image(systemName: "plus")
+            }
+            .help("添加手势绑定")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
+    private var bindingListPane: some View {
+        VStack(spacing: 0) {
+            List(selection: $selectedBindingID) {
+                ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
+                    bindingListRow(at: index)
+                        .tag(id)
+                }
+            }
+            .listStyle(.sidebar)
+
+            Divider()
+            HStack {
+                Button {
+                    model.addBinding()
+                    selectedBindingID = model.bindingIDs.last
+                } label: {
+                    Label("添加", systemImage: "plus")
+                }
+                Spacer()
+                Text("\(model.draft.bindings.count) 个绑定")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(10)
+        }
+    }
+
+    @ViewBuilder
+    private var bindingDetailPane: some View {
+        if let index = selectedBindingIndex {
+            ScrollView {
+                bindingEditor(at: index)
+                    .padding(24)
+                    .frame(maxWidth: 760, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .top)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: "scribble.variable")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.tertiary)
+                Text("选择一个手势绑定")
+                    .font(.title3.weight(.medium))
+                Text("从列表中选择绑定，或添加一个新的手势。")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
