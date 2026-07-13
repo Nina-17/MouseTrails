@@ -5,10 +5,12 @@ import CoreImage
 import CoreMedia
 import MouseIncCore
 import UniformTypeIdentifiers
+@preconcurrency import Vision
 
 @MainActor
 final class CaptureCoordinator: NSObject {
     private var pinnedWindows: [PinnedImageWindowController] = []
+    private var ocrResultWindows: [OCRResultWindowController] = []
 
     func perform(_ action: CaptureAction, gestureBounds: CGRect?) -> Bool {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
@@ -33,6 +35,29 @@ final class CaptureCoordinator: NSObject {
         return true
     }
 
+    func performOCR(_ action: OCRAction, gestureBounds: CGRect?) -> Bool {
+        guard action == .recognizeRegion else { return false }
+        guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
+            presentError(
+                title: "需要屏幕录制权限",
+                message: "请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 MouseIncMac，然后重新触发手势。"
+            )
+            return false
+        }
+        guard let gestureBounds, gestureBounds.width >= 4, gestureBounds.height >= 4 else {
+            presentError(
+                title: "手势范围不足",
+                message: "OCR 动作需要由包含有效宽度和高度的手势触发。"
+            )
+            return false
+        }
+        Task { @MainActor [weak self] in
+            await self?.recognizeText(rect: gestureBounds)
+        }
+        DiagnosticLogger.shared.log("OCR started from gesture bounds")
+        return true
+    }
+
     private func capture(rect: CGRect, action: CaptureAction) async {
         do {
             let image = try await captureImage(in: rect)
@@ -50,6 +75,18 @@ final class CaptureCoordinator: NSObject {
         } catch {
             DiagnosticLogger.shared.log("Capture failed: \(error.localizedDescription)")
             presentError(title: "截图失败", message: error.localizedDescription)
+        }
+    }
+
+    private func recognizeText(rect: CGRect) async {
+        do {
+            let image = try await captureImage(in: rect)
+            let text = try await OCRTextRecognizer.recognize(image)
+            createOCRResultWindow(text: text)
+            DiagnosticLogger.shared.log("OCR completed; hasText=\(!text.isEmpty)")
+        } catch {
+            DiagnosticLogger.shared.log("OCR failed: \(error.localizedDescription)")
+            presentError(title: "文字识别失败", message: error.localizedDescription)
         }
     }
 
@@ -160,6 +197,16 @@ final class CaptureCoordinator: NSObject {
         controller.show()
     }
 
+    private func createOCRResultWindow(text: String) {
+        let controller = OCRResultWindowController(text: text)
+        controller.onClose = { [weak self, weak controller] in
+            guard let self, let controller else { return }
+            self.ocrResultWindows.removeAll { $0 === controller }
+        }
+        ocrResultWindows.append(controller)
+        controller.show()
+    }
+
     private func copy(_ image: CGImage) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
@@ -187,6 +234,37 @@ final class CaptureCoordinator: NSObject {
         alert.messageText = title
         alert.informativeText = message
         alert.runModal()
+    }
+}
+
+private struct OCRImage: @unchecked Sendable {
+    var value: CGImage
+}
+
+private enum OCRTextRecognizer {
+    static func recognize(_ image: CGImage) async throws -> String {
+        let sendableImage = OCRImage(value: image)
+        return try await Task.detached(priority: .userInitiated) {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = .accurate
+            request.usesLanguageCorrection = true
+            request.automaticallyDetectsLanguage = true
+            request.recognitionLanguages = ["zh-Hans", "zh-Hant", "en-US"]
+
+            let handler = VNImageRequestHandler(cgImage: sendableImage.value)
+            try handler.perform([request])
+            let observations = request.results ?? []
+            let ordered = observations.sorted { lhs, rhs in
+                let verticalDifference = abs(lhs.boundingBox.midY - rhs.boundingBox.midY)
+                if verticalDifference < 0.02 {
+                    return lhs.boundingBox.minX < rhs.boundingBox.minX
+                }
+                return lhs.boundingBox.midY > rhs.boundingBox.midY
+            }
+            return ordered.compactMap { $0.topCandidates(1).first?.string }
+                .joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }.value
     }
 }
 
@@ -398,5 +476,104 @@ private final class PinnedImageView: NSImageView {
         imageAlignment = .alignCenter
         window.setFrame(compactFrame, display: true, animate: true)
         isCompact = true
+    }
+}
+
+@MainActor
+private final class OCRResultWindowController: NSWindowController, NSWindowDelegate {
+    var onClose: (() -> Void)?
+    private let recognizedText: String
+
+    init(text: String) {
+        recognizedText = text
+
+        let displayText = text.isEmpty ? "未识别到文字" : text
+        let textView = NSTextView()
+        textView.string = displayText
+        textView.isEditable = false
+        textView.isSelectable = !text.isEmpty
+        textView.font = .systemFont(ofSize: 15)
+        textView.textContainerInset = CGSize(width: 10, height: 10)
+        textView.backgroundColor = .textBackgroundColor
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = CGSize(
+            width: 528,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.frame = CGRect(x: 0, y: 0, width: 528, height: 310)
+
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.borderType = .bezelBorder
+
+        let copyButton = NSButton(title: "复制结果", target: nil, action: nil)
+        copyButton.isEnabled = !text.isEmpty
+        let closeButton = NSButton(title: "关闭", target: nil, action: nil)
+
+        let buttonRow = NSStackView(views: [copyButton, closeButton])
+        buttonRow.orientation = .horizontal
+        buttonRow.alignment = .centerY
+        buttonRow.spacing = 10
+
+        let contentView = NSView()
+        contentView.addSubview(scrollView)
+        contentView.addSubview(buttonRow)
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        buttonRow.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
+            scrollView.bottomAnchor.constraint(equalTo: buttonRow.topAnchor, constant: -12),
+            buttonRow.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
+            buttonRow.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
+        ])
+
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 560, height: 380),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "OCR 识别结果"
+        window.contentView = contentView
+        window.isReleasedWhenClosed = false
+        window.center()
+
+        super.init(window: window)
+        window.delegate = self
+        copyButton.target = self
+        copyButton.action = #selector(copyResult)
+        closeButton.target = self
+        closeButton.action = #selector(closeResult)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show() {
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?()
+    }
+
+    @objc private func copyResult() {
+        guard !recognizedText.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(recognizedText, forType: .string)
+    }
+
+    @objc private func closeResult() {
+        window?.close()
     }
 }

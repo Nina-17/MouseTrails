@@ -339,6 +339,7 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case delay
         case windowAction
         case captureAction
+        case ocrAction
     }
 
     public var type: Kind

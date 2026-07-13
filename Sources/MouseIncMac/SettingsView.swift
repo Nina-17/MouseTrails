@@ -157,6 +157,13 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
+        } else if actionKind(binding: binding, action: action) == .ocrAction {
+            Picker("OCR 动作", selection: actionValueBinding(binding: binding, action: action)) {
+                ForEach(OCRAction.allCases, id: \.self) { value in
+                    Text(ocrActionName(value)).tag(value.rawValue)
+                }
+            }
+            .labelsHidden()
         } else {
             let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
@@ -188,7 +195,7 @@ struct SettingsView: View {
                 required: model.draft.requiredPermissions.contains(.screenRecording)
             )
             permissionRow("输入监控", state: snapshot[.inputMonitoring], required: false)
-            Text("截图与贴图首次使用时才请求屏幕录制权限；拒绝不会影响手势和窗口动作。")
+            Text("截图、贴图与 OCR 首次使用时才请求屏幕录制权限；拒绝不会影响手势和窗口动作。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -407,6 +414,7 @@ struct SettingsView: View {
         case .delay: "0.2"
         case .windowAction: WindowAction.center.rawValue
         case .captureAction: CaptureAction.pinRegion.rawValue
+        case .ocrAction: OCRAction.recognizeRegion.rawValue
         }
     }
 
@@ -415,6 +423,12 @@ struct SettingsView: View {
         case .pinRegion: return "按手势范围生成贴图"
         case .copyRegion: return "按手势范围复制"
         case .saveRegion: return "按手势范围保存"
+        }
+    }
+
+    private func ocrActionName(_ action: OCRAction) -> String {
+        switch action {
+        case .recognizeRegion: return "识别手势范围内的文字"
         }
     }
 }

@@ -99,6 +99,30 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(executor.isExecuting)
     }
 
+    func testOCRActionUsesInjectedHandler() async throws {
+        var receivedAction: OCRAction?
+        let expectedBounds = CGRect(x: 15, y: 25, width: 120, height: 80)
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            windowActionHandler: { _ in true },
+            captureActionHandler: { _, _ in true },
+            ocrActionHandler: { action, bounds in
+                receivedAction = action
+                XCTAssertEqual(bounds, expectedBounds)
+                return true
+            }
+        )
+
+        executor.execute(
+            [.init(type: .ocrAction, value: OCRAction.recognizeRegion.rawValue)],
+            context: .init(gestureBounds: expectedBounds)
+        )
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(receivedAction, .recognizeRegion)
+        XCTAssertFalse(executor.isExecuting)
+    }
+
     private func makeExecutor() -> ActionExecutor {
         ActionExecutor(
             eventLogger: { _, _ in },

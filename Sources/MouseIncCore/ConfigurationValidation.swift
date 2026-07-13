@@ -197,6 +197,8 @@ public extension AppConfiguration {
             message = WindowAction(rawValue: value) == nil ? "不支持的窗口操作" : nil
         case .captureAction:
             message = CaptureAction(rawValue: value) == nil ? "不支持的截图操作" : nil
+        case .ocrAction:
+            message = OCRAction(rawValue: value) == nil ? "不支持的 OCR 操作" : nil
         }
 
         if let message {

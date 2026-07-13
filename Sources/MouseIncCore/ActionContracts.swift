@@ -39,6 +39,10 @@ public enum CaptureAction: String, Codable, CaseIterable, Sendable {
     case saveRegion
 }
 
+public enum OCRAction: String, Codable, CaseIterable, Sendable {
+    case recognizeRegion
+}
+
 public struct ParsedKeyStroke: Equatable, Sendable {
     public var modifiers: Set<KeyStrokeModifier>
     public var key: String
@@ -147,6 +151,13 @@ public enum ActionCatalog {
                 kind: .captureAction,
                 displayName: "截图与贴图",
                 valueDescription: "按手势范围贴图、复制或保存",
+                requiredPermissions: [.screenRecording]
+            )
+        case .ocrAction:
+            ActionDescriptor(
+                kind: .ocrAction,
+                displayName: "离线 OCR",
+                valueDescription: "识别手势范围内的文字",
                 requiredPermissions: [.screenRecording]
             )
         }

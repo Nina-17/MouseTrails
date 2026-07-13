@@ -14,23 +14,27 @@ final class ActionExecutor {
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
+    typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
     private let eventLogger: EventLogger
     private let windowActionHandler: WindowActionHandler
     private let captureActionHandler: CaptureActionHandler
+    private let ocrActionHandler: OCRActionHandler
 
     init(
         eventLogger: @escaping EventLogger = { event, metadata in
             DiagnosticLogger.shared.log(event: event, metadata: metadata)
         },
         windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
-        captureActionHandler: @escaping CaptureActionHandler = { _, _ in false }
+        captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
+        ocrActionHandler: @escaping OCRActionHandler = { _, _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
         self.captureActionHandler = captureActionHandler
+        self.ocrActionHandler = ocrActionHandler
     }
 
     var isExecuting: Bool {
@@ -114,6 +118,9 @@ final class ActionExecutor {
         case .captureAction:
             guard let captureAction = CaptureAction(rawValue: action.value) else { return false }
             return captureActionHandler(captureAction, context.gestureBounds)
+        case .ocrAction:
+            guard let ocrAction = OCRAction(rawValue: action.value) else { return false }
+            return ocrActionHandler(ocrAction, context.gestureBounds)
         }
     }
 

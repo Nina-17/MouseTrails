@@ -32,6 +32,10 @@ final class ActionContractsTests: XCTestCase {
             [.screenRecording]
         )
         XCTAssertEqual(
+            ActionCatalog.descriptor(for: .ocrAction).requiredPermissions,
+            [.screenRecording]
+        )
+        XCTAssertEqual(
             Set(ActionCatalog.descriptors.map(\.kind)),
             Set(ActionDefinition.Kind.allCases)
         )
@@ -52,6 +56,26 @@ final class ActionContractsTests: XCTestCase {
                 gesture: "SQUARE",
                 name: "无效截图",
                 actions: [.init(type: .captureAction, value: "unknown")]
+            )
+        ])
+        XCTAssertFalse(invalid.validate().isValid)
+    }
+
+    func testOCRActionsValidateKnownValues() {
+        let valid = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP_LEFT",
+                name: "离线 OCR",
+                actions: [.init(type: .ocrAction, value: OCRAction.recognizeRegion.rawValue)]
+            )
+        ])
+        XCTAssertTrue(valid.validate().isValid)
+
+        let invalid = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP_LEFT",
+                name: "无效 OCR",
+                actions: [.init(type: .ocrAction, value: "unknown")]
             )
         ])
         XCTAssertFalse(invalid.validate().isValid)
