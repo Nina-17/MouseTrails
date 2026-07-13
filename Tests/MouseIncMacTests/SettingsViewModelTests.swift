@@ -36,7 +36,7 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft.bindings[1].name, "我的操作")
     }
 
-    func testChangingActionReplacesDefaultName() {
+    func testChangingActionTypeKeepsDefaultNameUntilActionValueChanges() {
         var configuration = AppConfiguration(bindings: [
             GestureBinding(
                 gesture: "UP",
@@ -53,7 +53,15 @@ final class SettingsViewModelTests: XCTestCase {
             bindingIndex: 0
         )
 
-        XCTAssertEqual(model.draft.bindings[0].name, "生成贴图")
+        XCTAssertEqual(model.draft.bindings[0].name, "新手势")
+
+        model.setActionValue(
+            CaptureAction.saveRegion.rawValue,
+            actionIndex: 0,
+            bindingIndex: 0
+        )
+
+        XCTAssertEqual(model.draft.bindings[0].name, "保存截图")
     }
 
     func testChangingActionValueReplacesDefaultName() {

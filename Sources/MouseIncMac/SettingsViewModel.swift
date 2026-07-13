@@ -118,7 +118,6 @@ final class SettingsViewModel: ObservableObject {
             draft.bindings[bindingIndex].actions.indices.contains(actionIndex)
         else { return }
         draft.bindings[bindingIndex].actions[actionIndex] = ActionDefinition(type: kind, value: value)
-        updateDefaultNameIfNeeded(at: bindingIndex)
     }
 
     func setActionValue(
