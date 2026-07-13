@@ -24,6 +24,19 @@ final class ActionContractsTests: XCTestCase {
         XCTAssertTrue(WindowAction.allCases.contains(.closeAll))
     }
 
+    func testQuitApplicationWindowActionIsSupported() {
+        let configuration = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "LETTER_W",
+                name: "退出当前应用",
+                actions: [.init(type: .windowAction, value: WindowAction.quitApplication.rawValue)]
+            )
+        ])
+
+        XCTAssertTrue(configuration.validate().isValid)
+        XCTAssertTrue(WindowAction.allCases.contains(.quitApplication))
+    }
+
     func testKeyStrokeParserNormalizesAliasesAndRejectsUnknownTokens() {
         XCTAssertEqual(
             KeyStrokeParser.parse("Cmd+Alt+Shift+C"),

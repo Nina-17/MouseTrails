@@ -35,7 +35,13 @@ enum AccessibilityWindowActions {
             return pressWindowButton(kAXCloseButtonAttribute)
         case .closeAll:
             return sendCloseAllShortcut()
+        case .quitApplication:
+            return quitFrontmostApplication()
         }
+    }
+
+    private static func quitFrontmostApplication() -> Bool {
+        NSWorkspace.shared.frontmostApplication?.terminate() ?? false
     }
 
     private static func sendCloseAllShortcut() -> Bool {

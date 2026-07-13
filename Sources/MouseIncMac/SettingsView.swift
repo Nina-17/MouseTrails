@@ -703,6 +703,7 @@ struct SettingsView: View {
         case .minimize: return "最小化窗口"
         case .close: return "关闭窗口"
         case .closeAll: return "关闭所有类似窗口"
+        case .quitApplication: return "退出当前应用"
         }
     }
 

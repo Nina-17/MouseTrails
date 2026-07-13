@@ -13,6 +13,7 @@ public enum WindowAction: String, Codable, CaseIterable, Sendable {
     case minimize
     case close
     case closeAll
+    case quitApplication
 
     public init(from decoder: Decoder) throws {
         let value = try decoder.singleValueContainer().decode(String.self)
