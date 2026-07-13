@@ -2,6 +2,25 @@ import AppKit
 @preconcurrency import ApplicationServices
 import MouseIncCore
 
+enum CloseAllWindowStrategy: Equatable {
+    case terminateApplication
+    case sendCloseAllShortcut
+
+    static func forBundleIdentifier(_ bundleIdentifier: String?) -> Self {
+        switch bundleIdentifier {
+        case "com.apple.Safari",
+             "com.apple.SafariTechnologyPreview",
+             "com.google.Chrome",
+             "com.google.Chrome.beta",
+             "com.google.Chrome.canary",
+             "com.google.Chrome.dev":
+            return .terminateApplication
+        default:
+            return .sendCloseAllShortcut
+        }
+    }
+}
+
 @MainActor
 enum AccessibilityWindowActions {
     static func perform(_ action: WindowAction) -> Bool {
@@ -20,7 +39,10 @@ enum AccessibilityWindowActions {
     }
 
     private static func sendCloseAllShortcut() -> Bool {
-        guard NSWorkspace.shared.frontmostApplication != nil else { return false }
+        guard let application = NSWorkspace.shared.frontmostApplication else { return false }
+        if CloseAllWindowStrategy.forBundleIdentifier(application.bundleIdentifier) == .terminateApplication {
+            return application.terminate()
+        }
         let source = CGEventSource(stateID: .hidSystemState)
         guard
             let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: true),
