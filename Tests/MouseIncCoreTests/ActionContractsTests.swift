@@ -173,4 +173,45 @@ final class ActionContractsTests: XCTestCase {
         XCTAssertEqual(result.issues.map(\.severity), [.warning])
         XCTAssertEqual(result.issues.map(\.code), [.emptyBindingName])
     }
+
+    func testCustomBindingMustReferenceAValidDefinition() {
+        let configuration = AppConfiguration(
+            bindings: [
+                GestureBinding(
+                    gesture: "CUSTOM_MISSING",
+                    name: "缺失的自定义手势",
+                    actions: [.init(type: .keyStroke, value: "Command+C")]
+                )
+            ]
+        )
+
+        let result = configuration.validate()
+
+        XCTAssertFalse(result.isValid)
+        XCTAssertTrue(result.issues.contains {
+            $0.code == .invalidCustomGesture && $0.path == "bindings[0].gesture"
+        })
+    }
+
+    func testCustomGestureRejectsDegenerateStoredSamples() {
+        let points = Array(repeating: GestureSamplePoint(x: 0, y: 0), count: 64)
+        let definition = CustomGestureDefinition(
+            identifier: "CUSTOM_FLAT",
+            name: "无效轨迹",
+            samples: Array(repeating: points, count: 3)
+        )
+        let configuration = AppConfiguration(
+            customGestures: [definition],
+            bindings: [GestureBinding(
+                gesture: definition.identifier,
+                name: "无效轨迹",
+                actions: [.init(type: .keyStroke, value: "Command+C")]
+            )]
+        )
+
+        XCTAssertFalse(configuration.validate().isValid)
+        XCTAssertTrue(configuration.validate().issues.contains {
+            $0.code == .invalidCustomGesture && $0.path == "customGestures[0].samples"
+        })
+    }
 }

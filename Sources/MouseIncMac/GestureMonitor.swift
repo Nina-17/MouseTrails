@@ -16,6 +16,7 @@ final class GestureMonitor: NSObject {
     private let overlay: GestureOverlay
     private let executor: ActionExecutor
     private let edgeScrollController: EdgeScrollController
+    private let customGestureRecorder: CustomGestureRecordingController
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var session = GestureSession()
@@ -34,12 +35,14 @@ final class GestureMonitor: NSObject {
         configuration: @escaping () -> AppConfiguration,
         overlay: GestureOverlay,
         executor: ActionExecutor,
-        edgeScrollController: EdgeScrollController = EdgeScrollController()
+        edgeScrollController: EdgeScrollController = EdgeScrollController(),
+        customGestureRecorder: CustomGestureRecordingController = CustomGestureRecordingController()
     ) {
         configurationProvider = configuration
         self.overlay = overlay
         self.executor = executor
         self.edgeScrollController = edgeScrollController
+        self.customGestureRecorder = customGestureRecorder
         super.init()
     }
 
@@ -131,7 +134,7 @@ final class GestureMonitor: NSObject {
             handleEdgeScroll(event: event, configuration: configuration, now: now)
             return Unmanaged.passUnretained(event)
         case .rightMouseDown:
-            guard options.enabled else {
+            guard options.enabled || customGestureRecorder.isRecording else {
                 clearSession()
                 return Unmanaged.passUnretained(event)
             }
@@ -178,7 +181,11 @@ final class GestureMonitor: NSObject {
                 deltaY: deltaY,
                 now: now
             )
-            handleDragResult(result, showsTrail: options.showsTrail, trailColor: options.trailColor)
+            handleDragResult(
+                result,
+                showsTrail: options.showsTrail || customGestureRecorder.isRecording,
+                trailColor: options.trailColor
+            )
             return nil
 
         case .rightMouseUp:
@@ -309,25 +316,62 @@ final class GestureMonitor: NSObject {
         case .passthrough:
             break
         case let .recognize(points, targetBundleIdentifier):
+            if customGestureRecorder.consume(points: points) {
+                let progress = customGestureRecorder.statusMessage ?? "自定义手势样本已记录"
+                DiagnosticLogger.shared.log("Custom gesture recording: \(progress)")
+                onGesture?(progress)
+                didLogDrag = false
+                return
+            }
+
             let recognizer = GestureRecognizer(
                 simplificationTolerance: options.simplificationTolerance,
                 minimumGestureLength: options.minimumGestureLength
             )
-            if let gesture = recognizer.recognize(points) {
-                if let binding = configuration.binding(for: gesture, bundleIdentifier: targetBundleIdentifier) {
-                    executor.execute(
-                        binding.actions,
-                        options: configuration.actionSequenceOptions,
-                        context: .init(gestureBounds: Self.boundingRect(of: points))
-                    )
-                    logger.info("Gesture matched: \(gesture, privacy: .public)")
-                    DiagnosticLogger.shared.log("Gesture matched: \(gesture); action=\(binding.name)")
-                    onGesture?("\(gesture) · \(binding.name)")
-                } else {
-                    logger.info("Gesture has no binding: \(gesture, privacy: .public)")
-                    DiagnosticLogger.shared.log("Gesture has no binding: \(gesture)")
-                    if options.reportsFailures { onGesture?("\(gesture) · 未绑定") }
-                }
+            let fixedGesture = recognizer.recognize(points)
+            if let fixedGesture,
+               let binding = configuration.binding(
+                   for: fixedGesture,
+                   bundleIdentifier: targetBundleIdentifier
+               ) {
+                execute(
+                    binding: binding,
+                    identifier: fixedGesture,
+                    points: points,
+                    configuration: configuration
+                )
+                break
+            }
+
+            let applicableCustomGestures = configuration.customGestures.filter {
+                configuration.binding(
+                    for: $0.identifier,
+                    bundleIdentifier: targetBundleIdentifier
+                ) != nil
+            }
+            if let customMatch = CustomGestureRecognizer(
+                definitions: applicableCustomGestures
+            ).recognize(points),
+               let binding = configuration.binding(
+                   for: customMatch.identifier,
+                   bundleIdentifier: targetBundleIdentifier
+               ) {
+                execute(
+                    binding: binding,
+                    identifier: customMatch.identifier,
+                    points: points,
+                    configuration: configuration
+                )
+                DiagnosticLogger.shared.log(
+                    "Custom gesture score=\(customMatch.score); runnerUp=\(customMatch.runnerUpScore ?? 0)"
+                )
+                break
+            }
+
+            if let fixedGesture {
+                logger.info("Gesture has no binding: \(fixedGesture, privacy: .public)")
+                DiagnosticLogger.shared.log("Gesture has no binding: \(fixedGesture)")
+                if options.reportsFailures { onGesture?("\(fixedGesture) · 未绑定") }
             } else {
                 logger.info("Gesture was not recognized")
                 DiagnosticLogger.shared.log("Gesture was not recognized; pointCount=\(points.count)")
@@ -341,6 +385,22 @@ final class GestureMonitor: NSObject {
             logger.debug("Timed-out gesture cancelled without right-click replay")
         }
         didLogDrag = false
+    }
+
+    private func execute(
+        binding: GestureBinding,
+        identifier: String,
+        points: [CGPoint],
+        configuration: AppConfiguration
+    ) {
+        executor.execute(
+            binding.actions,
+            options: configuration.actionSequenceOptions,
+            context: .init(gestureBounds: Self.boundingRect(of: points))
+        )
+        logger.info("Gesture matched: \(identifier, privacy: .public)")
+        DiagnosticLogger.shared.log("Gesture matched: \(identifier); action=\(binding.name)")
+        onGesture?("\(identifier) · \(binding.name)")
     }
 
     private func expireActiveSession() {

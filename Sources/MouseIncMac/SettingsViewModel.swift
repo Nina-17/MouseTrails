@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import MouseIncCore
 
@@ -6,13 +7,16 @@ final class SettingsViewModel: ObservableObject {
     @Published var draft: AppConfiguration
     @Published private(set) var saveMessage: String?
     private(set) var bindingIDs: [UUID]
+    let customGestureRecorder: CustomGestureRecordingController
 
     private let saveHandler: @MainActor (AppConfiguration) throws -> Void
     private let exportHandler: @MainActor (AppConfiguration, URL) throws -> Void
     private let restoreHandler: @MainActor (URL) throws -> AppConfiguration
+    private var cancellables: Set<AnyCancellable> = []
 
     init(
         configuration: AppConfiguration,
+        customGestureRecorder: CustomGestureRecordingController = CustomGestureRecordingController(),
         saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
         exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void = { _, _ in },
         restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration = { _ in
@@ -21,9 +25,13 @@ final class SettingsViewModel: ObservableObject {
     ) {
         draft = configuration
         bindingIDs = configuration.bindings.map { _ in UUID() }
+        self.customGestureRecorder = customGestureRecorder
         self.saveHandler = saveHandler
         self.exportHandler = exportHandler
         self.restoreHandler = restoreHandler
+        customGestureRecorder.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var validation: ConfigurationValidationResult {
@@ -48,6 +56,9 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func reload(_ configuration: AppConfiguration) {
+        if customGestureRecorder.isRecording {
+            customGestureRecorder.cancel()
+        }
         bindingIDs = configuration.bindings.map { _ in UUID() }
         draft = configuration
         saveMessage = nil
@@ -69,8 +80,21 @@ final class SettingsViewModel: ObservableObject {
             draft.bindings.indices.contains(index),
             bindingIDs.indices.contains(index)
         else { return }
+        let removedID = bindingIDs[index]
+        let removedGesture = draft.bindings[index].gesture
+        if customGestureRecorder.targetBindingID == removedID, customGestureRecorder.isRecording {
+            customGestureRecorder.cancel()
+        }
         bindingIDs.remove(at: index)
         draft.bindings.remove(at: index)
+        if removedGesture.uppercased().hasPrefix("CUSTOM_"),
+           !draft.bindings.contains(where: {
+               $0.gesture.caseInsensitiveCompare(removedGesture) == .orderedSame
+           }) {
+            draft.customGestures.removeAll {
+                $0.identifier.caseInsensitiveCompare(removedGesture) == .orderedSame
+            }
+        }
     }
 
     func binding(at index: Int) -> GestureBinding? {
@@ -85,6 +109,84 @@ final class SettingsViewModel: ObservableObject {
     func setGesture(_ gesture: String, for bindingIndex: Int) {
         guard draft.bindings.indices.contains(bindingIndex) else { return }
         draft.bindings[bindingIndex].gesture = gesture
+    }
+
+    func customGesture(for identifier: String) -> CustomGestureDefinition? {
+        draft.customGestures.first {
+            $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame
+        }
+    }
+
+    func previewPoints(for identifier: String) -> [CGPoint]? {
+        customGesture(for: identifier)?.previewPoints
+    }
+
+    func displayName(forCustomGesture identifier: String) -> String? {
+        customGesture(for: identifier)?.name
+    }
+
+    func startCustomGestureRecording(at bindingIndex: Int) {
+        guard
+            draft.bindings.indices.contains(bindingIndex),
+            bindingIDs.indices.contains(bindingIndex)
+        else { return }
+
+        let bindingID = bindingIDs[bindingIndex]
+        let currentIdentifier = draft.bindings[bindingIndex].gesture
+        let existing = customGesture(for: currentIdentifier)
+        let identifier = existing?.identifier ?? "CUSTOM_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        let name = existing?.name ?? "自定义轨迹 \(draft.customGestures.count + 1)"
+
+        customGestureRecorder.start(targetBindingID: bindingID) { [weak self] samples in
+            guard let self, let targetIndex = self.bindingIDs.firstIndex(of: bindingID) else {
+                return .init(succeeded: false, message: "目标手势已不存在")
+            }
+            do {
+                let otherCustomGestures = self.draft.customGestures.filter {
+                    $0.identifier.caseInsensitiveCompare(identifier) != .orderedSame
+                }
+                let fixedIdentifiers = Set(self.draft.bindings.compactMap { binding -> String? in
+                    let value = binding.gesture.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return value.uppercased().hasPrefix("CUSTOM_") ? nil : value.uppercased()
+                })
+                let result = try CustomGestureTrainer.train(
+                    identifier: identifier,
+                    name: name,
+                    rawSamples: samples,
+                    existingCustomGestures: otherCustomGestures,
+                    fixedGestureIdentifiers: fixedIdentifiers
+                )
+                if let index = self.draft.customGestures.firstIndex(where: {
+                    $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame
+                }) {
+                    self.draft.customGestures[index] = result.definition
+                } else {
+                    self.draft.customGestures.append(result.definition)
+                }
+                self.draft.bindings[targetIndex].gesture = identifier
+                let suffix = result.warnings.isEmpty
+                    ? ""
+                    : "；提示：\(result.warnings.joined(separator: "；"))"
+                return .init(
+                    succeeded: true,
+                    message: "训练完成，相似度 \(Int(result.cohesionScore * 100))%\(suffix)"
+                )
+            } catch let error as CustomGestureTrainingError {
+                switch error {
+                case .invalidSampleCount:
+                    return .init(succeeded: false, message: "需要完整录制 3 次")
+                case let .invalidSample(index):
+                    return .init(succeeded: false, message: "第 \(index + 1) 次轨迹过短，请重新录制")
+                case let .inconsistentSamples(score):
+                    return .init(
+                        succeeded: false,
+                        message: "三次轨迹差异过大（\(Int(score * 100))%），请重新录制"
+                    )
+                }
+            } catch {
+                return .init(succeeded: false, message: error.localizedDescription)
+            }
+        }
     }
 
     func useApplication(at url: URL, for bindingIndex: Int) -> Bool {

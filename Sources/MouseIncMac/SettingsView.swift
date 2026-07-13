@@ -206,7 +206,10 @@ struct SettingsView: View {
     private var compactBindingSelector: some View {
         HStack(spacing: 10) {
             if let index = selectedBindingIndex, let binding = model.binding(at: index) {
-                GesturePreview(identifier: binding.gesture)
+                GesturePreview(
+                    identifier: binding.gesture,
+                    samplePoints: model.previewPoints(for: binding.gesture)
+                )
                     .frame(width: 46, height: 34)
                     .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
             }
@@ -296,7 +299,10 @@ struct SettingsView: View {
     private func bindingListRow(at index: Int) -> some View {
         if let binding = model.binding(at: index) {
             HStack(spacing: 10) {
-                GesturePreview(identifier: binding.gesture)
+                GesturePreview(
+                    identifier: binding.gesture,
+                    samplePoints: model.previewPoints(for: binding.gesture)
+                )
                     .frame(width: 54, height: 42)
                     .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 3) {
@@ -326,7 +332,10 @@ struct SettingsView: View {
         if let binding = model.binding(at: index) {
           VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 16) {
-                GesturePreview(identifier: binding.gesture)
+                GesturePreview(
+                    identifier: binding.gesture,
+                    samplePoints: model.previewPoints(for: binding.gesture)
+                )
                     .frame(width: 112, height: 82)
                     .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
                 VStack(alignment: .leading, spacing: 8) {
@@ -368,6 +377,37 @@ struct SettingsView: View {
                         .frame(width: 90, alignment: .leading)
                     TextField("手势标识", text: bindingText(at: index, keyPath: \.gesture))
                 }
+                Divider()
+                let isRecordingTarget = model.bindingIDs.indices.contains(index)
+                    && model.customGestureRecorder.targetBindingID == model.bindingIDs[index]
+                HStack(spacing: 10) {
+                    Button {
+                        if model.customGestureRecorder.isRecording, isRecordingTarget {
+                            model.customGestureRecorder.cancel()
+                        } else {
+                            model.startCustomGestureRecording(at: index)
+                        }
+                    } label: {
+                        Label(
+                            model.customGestureRecorder.isRecording && isRecordingTarget
+                                ? "取消录制"
+                                : (model.customGesture(for: binding.gesture) == nil ? "录制自定义手势" : "重新录制"),
+                            systemImage: model.customGestureRecorder.isRecording && isRecordingTarget
+                                ? "xmark.circle" : "record.circle"
+                        )
+                    }
+                    .disabled(model.customGestureRecorder.isRecording && !isRecordingTarget)
+                    if isRecordingTarget, let message = model.customGestureRecorder.statusMessage {
+                        Text(message)
+                            .font(.caption)
+                            .foregroundStyle(
+                                model.customGestureRecorder.isRecording ? Color.orange : Color.secondary
+                            )
+                    }
+                }
+                Text("连续按住右键绘制同一轨迹 3 次；录制期间只采集样本，不执行现有手势。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
               }
               .padding(10)
             }
@@ -747,6 +787,9 @@ struct SettingsView: View {
     private func displayName(for identifier: String) -> String {
         guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return "无"
+        }
+        if let customName = model.displayName(forCustomGesture: identifier) {
+            return customName
         }
         return (cardinalGestureChoices + templateGestureChoices + polylineGestureChoices)
             .first { $0.0 == identifier }?.1 ?? identifier

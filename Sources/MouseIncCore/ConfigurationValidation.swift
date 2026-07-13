@@ -15,6 +15,7 @@ public enum ConfigurationIssueCode: String, Codable, Sendable {
     case duplicateBinding
     case invalidBundleIdentifier
     case invalidActionValue
+    case invalidCustomGesture
 }
 
 public struct ConfigurationIssue: Codable, Equatable, Sendable {
@@ -54,8 +55,60 @@ public extension AppConfiguration {
         validateGestureOptions(into: &issues)
         validateActionSequenceOptions(into: &issues)
         validateEdgeScrollOptions(into: &issues)
+        validateCustomGestures(into: &issues)
         validateBindings(into: &issues)
         return ConfigurationValidationResult(issues: issues)
+    }
+
+    private func validateCustomGestures(into issues: inout [ConfigurationIssue]) {
+        var identifiers: Set<String> = []
+        for (index, gesture) in customGestures.enumerated() {
+            let path = "customGestures[\(index)]"
+            let identifier = gesture.identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            if gesture.identifier != identifier ||
+                !identifier.uppercased().hasPrefix("CUSTOM_") ||
+                !identifiers.insert(identifier.uppercased()).inserted {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidCustomGesture,
+                    path: "\(path).identifier",
+                    message: "自定义手势标识无效或重复"
+                ))
+            }
+            if gesture.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidCustomGesture,
+                    path: "\(path).name",
+                    message: "自定义手势名称不能为空"
+                ))
+            }
+            if gesture.samples.count != CustomGestureTrainer.requiredSampleCount ||
+                gesture.samples.contains(where: { $0.count != 64 }) {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidCustomGesture,
+                    path: "\(path).samples",
+                    message: "自定义手势必须包含 3 个有效样本"
+                ))
+            } else if gesture.samples.joined().contains(where: { !$0.x.isFinite || !$0.y.isFinite }) {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidCustomGesture,
+                    path: "\(path).samples",
+                    message: "自定义手势样本包含无效坐标"
+                ))
+            } else if gesture.samples.contains(where: {
+                GesturePathNormalizer.normalize($0.map(\.cgPoint), sampleCount: 64) == nil
+            }) {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidCustomGesture,
+                    path: "\(path).samples",
+                    message: "自定义手势样本没有有效轨迹"
+                ))
+            }
+        }
     }
 
     private func validateGestureOptions(into issues: inout [ConfigurationIssue]) {
@@ -117,6 +170,19 @@ public extension AppConfiguration {
                         code: .emptyGesture,
                         path: "\(bindingPath).gesture",
                         message: "手势标识不能为空"
+                    )
+                )
+            }
+            if gesture.uppercased().hasPrefix("CUSTOM_") &&
+                !customGestures.contains(where: {
+                    $0.identifier.caseInsensitiveCompare(gesture) == .orderedSame
+                }) {
+                issues.append(
+                    ConfigurationIssue(
+                        severity: .error,
+                        code: .invalidCustomGesture,
+                        path: "\(bindingPath).gesture",
+                        message: "绑定引用的自定义手势不存在"
                     )
                 )
             }

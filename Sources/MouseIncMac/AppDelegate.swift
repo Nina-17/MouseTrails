@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let configStore = ConfigStore()
     private let captureCoordinator = CaptureCoordinator()
     private let launchAtLogin = LaunchAtLoginController()
+    private let customGestureRecorder = CustomGestureRecordingController()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
@@ -47,7 +48,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let monitor = GestureMonitor(
             configuration: { [weak self] in self?.configuration ?? AppConfiguration() },
             overlay: overlay,
-            executor: executor
+            executor: executor,
+            customGestureRecorder: customGestureRecorder
         )
         monitor.onGesture = { [weak self] result in
             self?.lastGestureItem?.title = "最近手势：\(result)"
@@ -360,6 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 configuration: configuration,
+                customGestureRecorder: customGestureRecorder,
                 saveHandler: { [weak self] configuration in
                     guard let self else { return }
                     try self.configStore.save(configuration)

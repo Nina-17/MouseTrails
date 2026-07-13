@@ -3,6 +3,12 @@ import SwiftUI
 
 struct GesturePreview: View {
     let identifier: String
+    let samplePoints: [CGPoint]?
+
+    init(identifier: String, samplePoints: [CGPoint]? = nil) {
+        self.identifier = identifier
+        self.samplePoints = samplePoints
+    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -60,6 +66,9 @@ struct GesturePreview: View {
     }
 
     private var previewPoints: [CGPoint] {
+        if let samplePoints, samplePoints.count >= 2 {
+            return samplePoints
+        }
         guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }

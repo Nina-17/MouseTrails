@@ -1,12 +1,13 @@
 import Foundation
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
 
     public let schemaVersion: Int
     public var gestureOptions: GestureOptions
     public var actionSequenceOptions: ActionSequenceOptions
     public var edgeScrollOptions: EdgeScrollOptions
+    public var customGestures: [CustomGestureDefinition]
     public var bindings: [GestureBinding]
 
     public init(
@@ -20,6 +21,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         trailColor: GestureTrailColor = .orange,
         actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         edgeScrollOptions: EdgeScrollOptions = EdgeScrollOptions(),
+        customGestures: [CustomGestureDefinition] = [],
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
         schemaVersion = Self.currentSchemaVersion
@@ -35,6 +37,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         )
         self.actionSequenceOptions = actionSequenceOptions
         self.edgeScrollOptions = edgeScrollOptions
+        self.customGestures = customGestures
         self.bindings = bindings
     }
 
@@ -42,12 +45,14 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         gestureOptions: GestureOptions,
         actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         edgeScrollOptions: EdgeScrollOptions = EdgeScrollOptions(),
+        customGestures: [CustomGestureDefinition] = [],
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
         schemaVersion = Self.currentSchemaVersion
         self.gestureOptions = gestureOptions
         self.actionSequenceOptions = actionSequenceOptions
         self.edgeScrollOptions = edgeScrollOptions
+        self.customGestures = customGestures
         self.bindings = bindings
     }
 
@@ -106,6 +111,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         case gestureOptions
         case actionSequenceOptions
         case edgeScrollOptions
+        case customGestures
         case bindings
 
         // Legacy schema (implicit version 1).
@@ -163,6 +169,10 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         ) ?? ActionSequenceOptions()
         edgeScrollOptions = try container.decodeIfPresent(EdgeScrollOptions.self, forKey: .edgeScrollOptions)
             ?? EdgeScrollOptions()
+        customGestures = try container.decodeIfPresent(
+            [CustomGestureDefinition].self,
+            forKey: .customGestures
+        ) ?? []
         bindings = try container.decodeIfPresent([GestureBinding].self, forKey: .bindings)
             ?? GestureBinding.defaults
         for bindingIndex in bindings.indices {
@@ -180,7 +190,43 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         try container.encode(gestureOptions, forKey: .gestureOptions)
         try container.encode(actionSequenceOptions, forKey: .actionSequenceOptions)
         try container.encode(edgeScrollOptions, forKey: .edgeScrollOptions)
+        try container.encode(customGestures, forKey: .customGestures)
         try container.encode(bindings, forKey: .bindings)
+    }
+}
+
+public struct GestureSamplePoint: Codable, Equatable, Sendable {
+    public var x: Double
+    public var y: Double
+
+    public init(x: Double, y: Double) {
+        self.x = x
+        self.y = y
+    }
+
+    public init(_ point: CGPoint) {
+        x = point.x
+        y = point.y
+    }
+
+    public var cgPoint: CGPoint {
+        CGPoint(x: x, y: y)
+    }
+}
+
+public struct CustomGestureDefinition: Codable, Equatable, Sendable {
+    public var identifier: String
+    public var name: String
+    public var samples: [[GestureSamplePoint]]
+
+    public init(identifier: String, name: String, samples: [[GestureSamplePoint]]) {
+        self.identifier = identifier
+        self.name = name
+        self.samples = samples
+    }
+
+    public var previewPoints: [CGPoint] {
+        samples.first?.map(\.cgPoint) ?? []
     }
 }
 

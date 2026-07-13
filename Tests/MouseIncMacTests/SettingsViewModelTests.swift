@@ -144,6 +144,56 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft.bindings[index].gesture, "LETTER_C")
     }
 
+    func testThreeRecordedSamplesCreateCustomGestureAndUpdateBinding() {
+        let recorder = CustomGestureRecordingController()
+        let model = SettingsViewModel(
+            configuration: AppConfiguration(),
+            customGestureRecorder: recorder
+        ) { _ in }
+        model.addBinding()
+        let index = model.draft.bindings.count - 1
+        model.startCustomGestureRecording(at: index)
+        let sample = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: 20, y: 80),
+            CGPoint(x: 60, y: 30),
+            CGPoint(x: 100, y: 100)
+        ]
+
+        XCTAssertTrue(recorder.consume(points: sample))
+        XCTAssertTrue(recorder.consume(points: sample.map { CGPoint(x: $0.x * 1.2, y: $0.y * 0.9) }))
+        XCTAssertTrue(recorder.consume(points: sample.map { CGPoint(x: $0.x + 40, y: $0.y - 20) }))
+
+        XCTAssertFalse(recorder.isRecording)
+        XCTAssertEqual(recorder.recordedSampleCount, 3)
+        XCTAssertEqual(model.draft.customGestures.count, 1)
+        XCTAssertTrue(model.draft.bindings[index].gesture.hasPrefix("CUSTOM_"))
+        XCTAssertEqual(model.previewPoints(for: model.draft.bindings[index].gesture)?.count, 64)
+    }
+
+    func testRemovingOnlyBindingRemovesOwnedCustomGesture() throws {
+        let trained = try CustomGestureTrainer.train(
+            identifier: "CUSTOM_DELETE",
+            name: "删除测试",
+            rawSamples: Array(repeating: [
+                CGPoint(x: 0, y: 0), CGPoint(x: 40, y: 80), CGPoint(x: 100, y: 20)
+            ], count: 3)
+        ).definition
+        let configuration = AppConfiguration(
+            customGestures: [trained],
+            bindings: [GestureBinding(
+                gesture: trained.identifier,
+                name: "删除",
+                actions: [.init(type: .keyStroke, value: "Command+C")]
+            )]
+        )
+        let model = SettingsViewModel(configuration: configuration) { _ in }
+
+        model.removeBinding(at: 0)
+
+        XCTAssertEqual(model.draft.customGestures, [])
+    }
+
     func testExportAndRestoreHandlersUpdateStatusAndDraft() {
         var exported: AppConfiguration?
         var replacement = AppConfiguration()

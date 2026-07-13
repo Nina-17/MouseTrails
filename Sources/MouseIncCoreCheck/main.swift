@@ -94,8 +94,8 @@ private func runChecks() throws {
 private func runActionContractChecks() throws {
     try check(
         "schema version",
-        AppConfiguration.currentSchemaVersion == 4,
-        "Edge scroll configuration must encode schema 4"
+        AppConfiguration.currentSchemaVersion == 5,
+        "Custom gesture configuration must encode schema 5"
     )
     try check(
         "default validation",

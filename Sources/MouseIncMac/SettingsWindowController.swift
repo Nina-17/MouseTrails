@@ -11,6 +11,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     init(
         configuration: AppConfiguration,
+        customGestureRecorder: CustomGestureRecordingController,
         saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
         exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void,
         restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration,
@@ -21,6 +22,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.launchAtLogin = launchAtLogin
         model = SettingsViewModel(
             configuration: configuration,
+            customGestureRecorder: customGestureRecorder,
             saveHandler: saveHandler,
             exportHandler: exportHandler,
             restoreHandler: restoreHandler
@@ -61,6 +63,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        if model.customGestureRecorder.isRecording {
+            model.customGestureRecorder.cancel()
+        }
         closeHandler()
     }
 }

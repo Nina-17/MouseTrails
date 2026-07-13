@@ -141,6 +141,41 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertNotNil(object["actionSequenceOptions"])
     }
 
+    func testSchemaFourMigratesWithEmptyCustomGestures() throws {
+        let schemaFour = Data(
+            #"{"schemaVersion":4,"gestureOptions":{},"bindings":[]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: schemaFour)
+
+        XCTAssertEqual(configuration.schemaVersion, 5)
+        XCTAssertEqual(configuration.customGestures, [])
+    }
+
+    func testCustomGesturesRoundTripInSchemaFive() throws {
+        let samples = Array(repeating: [
+            GestureSamplePoint(x: -0.5, y: -0.5),
+            GestureSamplePoint(x: 0.5, y: 0.5)
+        ] + Array(repeating: GestureSamplePoint(x: 0.5, y: 0.5), count: 62), count: 3)
+        let definition = CustomGestureDefinition(
+            identifier: "CUSTOM_ROUNDTRIP",
+            name: "自定义轨迹",
+            samples: samples
+        )
+        let binding = GestureBinding(
+            gesture: definition.identifier,
+            name: "动作",
+            actions: [.init(type: .keyStroke, value: "Command+C")]
+        )
+        let configuration = AppConfiguration(customGestures: [definition], bindings: [binding])
+
+        let data = try JSONEncoder().encode(configuration)
+        let decoded = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(decoded, configuration)
+        XCTAssertTrue(decoded.validate().isValid)
+    }
+
     func testDelayActionAndSequenceOptionsRoundTrip() throws {
         let options = ActionSequenceOptions(
             interruptionPolicy: .ignoreNew,
