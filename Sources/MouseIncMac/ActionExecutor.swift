@@ -15,6 +15,7 @@ final class ActionExecutor {
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
+    typealias SearchSelectedTextHandler = @MainActor (String) -> Bool
     typealias KeyStrokeHandler = @MainActor (ParsedKeyStroke) -> Bool
 
     private var executionTask: Task<Void, Never>?
@@ -23,6 +24,7 @@ final class ActionExecutor {
     private let windowActionHandler: WindowActionHandler
     private let captureActionHandler: CaptureActionHandler
     private let ocrActionHandler: OCRActionHandler
+    private let searchSelectedTextHandler: SearchSelectedTextHandler
     private let keyStrokeHandler: KeyStrokeHandler
 
     init(
@@ -32,12 +34,14 @@ final class ActionExecutor {
         windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
         captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
         ocrActionHandler: @escaping OCRActionHandler = { _, _ in false },
+        searchSelectedTextHandler: @escaping SearchSelectedTextHandler = { _ in false },
         keyStrokeHandler: @escaping KeyStrokeHandler = { _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
         self.captureActionHandler = captureActionHandler
         self.ocrActionHandler = ocrActionHandler
+        self.searchSelectedTextHandler = searchSelectedTextHandler
         self.keyStrokeHandler = keyStrokeHandler
     }
 
@@ -125,6 +129,8 @@ final class ActionExecutor {
         case .ocrAction:
             guard let ocrAction = OCRAction(rawValue: action.value) else { return false }
             return ocrActionHandler(ocrAction, context.gestureBounds)
+        case .searchSelectedText:
+            return searchSelectedTextHandler(action.value)
         }
     }
 

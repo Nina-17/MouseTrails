@@ -14,6 +14,11 @@ public struct GestureRecognizer: Sendable {
             return nil
         }
 
+        if let template = GestureTemplateRecognizer().recognize(points),
+           template.identifier == "LETTER_S" || template.identifier == "LETTER_W" {
+            return template.identifier
+        }
+
         if let rectangle = RectangleGestureRecognizer().recognize(points) {
             return rectangle.rawValue
         }

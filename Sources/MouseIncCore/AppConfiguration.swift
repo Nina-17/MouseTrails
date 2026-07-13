@@ -349,6 +349,7 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case windowAction
         case captureAction
         case ocrAction
+        case searchSelectedText
     }
 
     public var type: Kind

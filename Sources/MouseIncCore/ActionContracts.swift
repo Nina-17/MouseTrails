@@ -43,6 +43,10 @@ public enum OCRAction: String, Codable, CaseIterable, Sendable {
     case recognizeRegion
 }
 
+public enum SearchSelectedTextAction {
+    public static let defaultURLTemplate = "https://www.google.com/search?q={query}"
+}
+
 public struct ParsedKeyStroke: Equatable, Sendable {
     public var modifiers: Set<KeyStrokeModifier>
     public var key: String
@@ -159,6 +163,13 @@ public enum ActionCatalog {
                 displayName: "离线 OCR",
                 valueDescription: "识别、复制并发送摘要通知",
                 requiredPermissions: [.screenRecording]
+            )
+        case .searchSelectedText:
+            ActionDescriptor(
+                kind: .searchSelectedText,
+                displayName: "搜索选中文字",
+                valueDescription: "搜索 URL 模板，使用 {query}",
+                requiredPermissions: [.accessibility]
             )
         }
     }

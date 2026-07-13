@@ -26,14 +26,14 @@ final class GestureTemplateRecognizerTests: XCTestCase {
         XCTAssertNil(recognizer.recognize(path))
     }
 
-    func testMainRecognizerReturnsTemplateIdentifierForCircle() {
-        let points = GestureTemplate.builtIns.first { $0.identifier == "CIRCLE" }!.points.map {
+    func testMainRecognizerReturnsTemplateIdentifierForLetterS() {
+        let points = GestureTemplate.builtIns.first { $0.identifier == "LETTER_S" }!.points.map {
             CGPoint(x: $0.x * 100, y: $0.y * 100)
         }
 
         XCTAssertEqual(
             GestureRecognizer(simplificationTolerance: 8, minimumGestureLength: 40).recognize(points),
-            "CIRCLE"
+            "LETTER_S"
         )
     }
 }

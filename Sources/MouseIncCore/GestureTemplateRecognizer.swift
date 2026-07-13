@@ -135,24 +135,15 @@ public struct GestureTemplateRecognizer: Sendable {
 
 public extension GestureTemplate {
     static let builtIns: [GestureTemplate] = [
-        GestureTemplate(identifier: "CIRCLE", points: circlePoints()),
-        GestureTemplate(identifier: "LETTER_C", points: arcPoints(from: .pi / 4, to: .pi * 7 / 4)),
-        GestureTemplate(identifier: "LETTER_M", points: polyline([
-            CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 0.5, y: 0.35),
-            CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0)
+        GestureTemplate(identifier: "LETTER_S", points: polyline([
+            CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 0.5),
+            CGPoint(x: 1, y: 0.5), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0)
         ])),
-        GestureTemplate(identifier: "LETTER_Z", points: polyline([
-            CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1),
-            CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0)
+        GestureTemplate(identifier: "LETTER_W", points: polyline([
+            CGPoint(x: 0, y: 1), CGPoint(x: 0.25, y: 0), CGPoint(x: 0.5, y: 0.62),
+            CGPoint(x: 0.75, y: 0), CGPoint(x: 1, y: 1)
         ]))
     ]
-
-    private static func circlePoints() -> [CGPoint] {
-        (0...64).map { index in
-            let angle = Double(index) / 64 * .pi * 2
-            return CGPoint(x: cos(angle), y: sin(angle))
-        }
-    }
 
     private static func arcPoints(from start: Double, to end: Double) -> [CGPoint] {
         (0...64).map { index in

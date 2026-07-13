@@ -178,6 +178,8 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
+        } else if actionKind(binding: binding, action: action) == .searchSelectedText {
+            TextField("搜索 URL 模板", text: actionValueBinding(binding: binding, action: action))
         } else {
             let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
@@ -406,12 +408,10 @@ struct SettingsView: View {
 
     private var templateGestureChoices: [(String, String)] {
         [
-            ("CIRCLE", "圆形"),
             ("SQUARE_CLOCKWISE", "顺时针方框"),
             ("SQUARE_COUNTERCLOCKWISE", "逆时针方框"),
-            ("LETTER_C", "字母 C"),
-            ("LETTER_M", "字母 M"),
-            ("LETTER_Z", "字母 Z")
+            ("LETTER_S", "字母 S"),
+            ("LETTER_W", "字母 W")
         ]
     }
 
@@ -438,6 +438,7 @@ struct SettingsView: View {
         case .windowAction: WindowAction.center.rawValue
         case .captureAction: CaptureAction.pinRegion.rawValue
         case .ocrAction: OCRAction.recognizeRegion.rawValue
+        case .searchSelectedText: SearchSelectedTextAction.defaultURLTemplate
         }
     }
 

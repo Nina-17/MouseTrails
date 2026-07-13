@@ -214,6 +214,8 @@ public extension AppConfiguration {
             message = CaptureAction(rawValue: value) == nil ? "不支持的截图操作" : nil
         case .ocrAction:
             message = OCRAction(rawValue: value) == nil ? "不支持的 OCR 操作" : nil
+        case .searchSelectedText:
+            message = value.contains("{query}") && URL(string: value.replacingOccurrences(of: "{query}", with: "query"))?.scheme != nil ? nil : "搜索 URL 必须包含 {query} 和有效 scheme"
         }
 
         if let message {
