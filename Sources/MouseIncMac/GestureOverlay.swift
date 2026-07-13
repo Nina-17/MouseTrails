@@ -1,4 +1,5 @@
 import AppKit
+import MouseIncCore
 
 @MainActor
 final class GestureOverlay {
@@ -23,7 +24,7 @@ final class GestureOverlay {
         panel.contentView = traceView
     }
 
-    func show(points: [CGPoint]) {
+    func show(points: [CGPoint], color: GestureTrailColor) {
         guard points.count > 1, let firstPoint = points.first else {
             hide()
             return
@@ -39,6 +40,7 @@ final class GestureOverlay {
         traceView.points = points.map {
             CGPoint(x: $0.x - screen.frame.minX, y: $0.y - screen.frame.minY)
         }
+        traceView.color = color
         traceView.needsDisplay = true
         panel.orderFrontRegardless()
     }
@@ -57,6 +59,7 @@ final class GestureOverlay {
 @MainActor
 private final class GestureTraceView: NSView {
     var points: [CGPoint] = []
+    var color: GestureTrailColor = .orange
 
     override var isFlipped: Bool { false }
 
@@ -78,7 +81,17 @@ private final class GestureTraceView: NSView {
         shadowPath.lineWidth = 7
         shadowPath.stroke()
 
-        NSColor.systemOrange.setStroke()
+        trailNSColor.setStroke()
         path.stroke()
+    }
+
+    private var trailNSColor: NSColor {
+        switch color {
+        case .orange: return .systemOrange
+        case .blue: return .systemBlue
+        case .green: return .systemGreen
+        case .pink: return .systemPink
+        case .purple: return .systemPurple
+        }
     }
 }

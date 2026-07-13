@@ -17,6 +17,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         maximumDuration: TimeInterval = 5,
         showsTrail: Bool = true,
         reportsFailures: Bool = true,
+        trailColor: GestureTrailColor = .orange,
         actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         edgeScrollOptions: EdgeScrollOptions = EdgeScrollOptions(),
         bindings: [GestureBinding] = GestureBinding.defaults
@@ -29,7 +30,8 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
             minimumGestureLength: minimumGestureLength,
             maximumDuration: maximumDuration,
             showsTrail: showsTrail,
-            reportsFailures: reportsFailures
+            reportsFailures: reportsFailures,
+            trailColor: trailColor
         )
         self.actionSequenceOptions = actionSequenceOptions
         self.edgeScrollOptions = edgeScrollOptions
@@ -239,6 +241,7 @@ public struct GestureOptions: Codable, Equatable, Sendable {
     public var maximumDuration: TimeInterval
     public var showsTrail: Bool
     public var reportsFailures: Bool
+    public var trailColor: GestureTrailColor
 
     public init(
         enabled: Bool = true,
@@ -247,7 +250,8 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         minimumGestureLength: Double = 40,
         maximumDuration: TimeInterval = 5,
         showsTrail: Bool = true,
-        reportsFailures: Bool = true
+        reportsFailures: Bool = true,
+        trailColor: GestureTrailColor = .orange
     ) {
         self.enabled = enabled
         self.startDistance = startDistance
@@ -256,6 +260,7 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         self.maximumDuration = maximumDuration
         self.showsTrail = showsTrail
         self.reportsFailures = reportsFailures
+        self.trailColor = trailColor
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -266,6 +271,7 @@ public struct GestureOptions: Codable, Equatable, Sendable {
         case maximumDuration
         case showsTrail
         case reportsFailures
+        case trailColor
     }
 
     public init(from decoder: Decoder) throws {
@@ -290,7 +296,19 @@ public struct GestureOptions: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .reportsFailures
         ) ?? defaults.reportsFailures
+        trailColor = try container.decodeIfPresent(
+            GestureTrailColor.self,
+            forKey: .trailColor
+        ) ?? defaults.trailColor
     }
+}
+
+public enum GestureTrailColor: String, Codable, CaseIterable, Sendable {
+    case orange
+    case blue
+    case green
+    case pink
+    case purple
 }
 
 public struct GestureBinding: Codable, Equatable, Sendable {

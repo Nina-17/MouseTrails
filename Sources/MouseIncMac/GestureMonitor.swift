@@ -178,7 +178,7 @@ final class GestureMonitor: NSObject {
                 deltaY: deltaY,
                 now: now
             )
-            handleDragResult(result, showsTrail: options.showsTrail)
+            handleDragResult(result, showsTrail: options.showsTrail, trailColor: options.trailColor)
             return nil
 
         case .rightMouseUp:
@@ -253,15 +253,19 @@ final class GestureMonitor: NSObject {
         up?.post(tap: .cgSessionEventTap)
     }
 
-    private func handleDragResult(_ result: GestureSession.DragResult, showsTrail: Bool) {
+    private func handleDragResult(
+        _ result: GestureSession.DragResult,
+        showsTrail: Bool,
+        trailColor: GestureTrailColor
+    ) {
         switch result {
         case .passthrough, .tracking:
             break
         case .gestureStarted:
             DiagnosticLogger.shared.log("Gesture threshold crossed")
-            updateOverlay(showsTrail: showsTrail)
+            updateOverlay(showsTrail: showsTrail, trailColor: trailColor)
         case .gestureUpdated:
-            updateOverlay(showsTrail: showsTrail)
+            updateOverlay(showsTrail: showsTrail, trailColor: trailColor)
         case let .timedOut(replayOnMouseUp, newlyExpired):
             overlay.hide()
             if newlyExpired {
@@ -270,9 +274,9 @@ final class GestureMonitor: NSObject {
         }
     }
 
-    private func updateOverlay(showsTrail: Bool) {
+    private func updateOverlay(showsTrail: Bool, trailColor: GestureTrailColor) {
         if showsTrail {
-            overlay.show(points: session.points)
+            overlay.show(points: session.points, color: trailColor)
         } else {
             overlay.hide()
         }

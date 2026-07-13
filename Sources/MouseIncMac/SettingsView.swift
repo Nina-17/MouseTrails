@@ -37,6 +37,11 @@ struct SettingsView: View {
         Section("手势") {
             Toggle("启用鼠标与触控板手势", isOn: $model.draft.gestureOptions.enabled)
             Toggle("显示轨迹", isOn: $model.draft.gestureOptions.showsTrail)
+            Picker("轨迹颜色", selection: $model.draft.gestureOptions.trailColor) {
+                ForEach(GestureTrailColor.allCases, id: \.self) { color in
+                    Text(trailColorName(color)).tag(color)
+                }
+            }
             Toggle("报告识别失败", isOn: $model.draft.gestureOptions.reportsFailures)
             numberField("启动距离", value: $model.draft.gestureOptions.startDistance)
             numberField("简化容差", value: $model.draft.gestureOptions.simplificationTolerance)
@@ -56,6 +61,16 @@ struct SettingsView: View {
                 Text("继续执行").tag(ActionSequenceOptions.FailurePolicy.continueSequence)
             }
             numberField("最大延时（秒）", value: $model.draft.actionSequenceOptions.maximumDelay)
+        }
+    }
+
+    private func trailColorName(_ color: GestureTrailColor) -> String {
+        switch color {
+        case .orange: return "橙色"
+        case .blue: return "蓝色"
+        case .green: return "绿色"
+        case .pink: return "粉色"
+        case .purple: return "紫色"
         }
     }
 

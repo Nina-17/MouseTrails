@@ -25,6 +25,7 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(configuration.gestureOptions.maximumDuration, 5)
         XCTAssertTrue(configuration.gestureOptions.showsTrail)
         XCTAssertTrue(configuration.gestureOptions.reportsFailures)
+        XCTAssertEqual(configuration.gestureOptions.trailColor, .orange)
         XCTAssertEqual(configuration.actionSequenceOptions, ActionSequenceOptions())
         XCTAssertEqual(configuration.bindings, GestureBinding.defaults)
     }
@@ -37,7 +38,8 @@ final class AppConfigurationTests: XCTestCase {
             minimumGestureLength: 55,
             maximumDuration: 2.5,
             showsTrail: false,
-            reportsFailures: false
+            reportsFailures: false,
+            trailColor: .purple
         )
         let configuration = AppConfiguration(gestureOptions: options, bindings: [.sampleGlobal])
 
