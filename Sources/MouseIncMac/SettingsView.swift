@@ -686,6 +686,7 @@ struct SettingsView: View {
         case .maximize: return "切换全屏（独立空间）"
         case .minimize: return "最小化窗口"
         case .close: return "关闭窗口"
+        case .closeAll: return "关闭所有类似窗口"
         }
     }
 

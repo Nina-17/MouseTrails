@@ -14,7 +14,23 @@ enum AccessibilityWindowActions {
             return setBooleanAttribute(kAXMinimizedAttribute, value: true)
         case .close:
             return pressWindowButton(kAXCloseButtonAttribute)
+        case .closeAll:
+            return sendCloseAllShortcut()
         }
+    }
+
+    private static func sendCloseAllShortcut() -> Bool {
+        guard NSWorkspace.shared.frontmostApplication != nil else { return false }
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: false)
+        else { return false }
+        keyDown.flags = [.maskCommand, .maskAlternate]
+        keyUp.flags = [.maskCommand, .maskAlternate]
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
     }
 
     private static func toggleFullScreen() -> Bool {
