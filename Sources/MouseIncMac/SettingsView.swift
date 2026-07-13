@@ -66,7 +66,10 @@ struct SettingsView: View {
             Form { permissionSection }
                 .formStyle(.grouped)
         case .pinnedImage:
-            Form { pinnedImageHelpSection }
+            Form {
+                pinnedImageHelpSection
+                ocrHelpSection
+            }
             .formStyle(.grouped)
         case .data:
             Form {
@@ -431,6 +434,17 @@ struct SettingsView: View {
         }
     }
 
+    private var ocrHelpSection: some View {
+        Section("离线 OCR") {
+            Label("根据手势轨迹的包围范围直接截图识别", systemImage: "viewfinder")
+            Label("识别结果自动复制到剪贴板", systemImage: "doc.on.clipboard")
+            Label("完成后通过系统通知显示文本摘要", systemImage: "bell")
+            Text("OCR 使用 macOS 本地视觉识别，不上传截图或文字。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
     private func permissionRow(_ name: String, state: PermissionState, required: Bool) -> some View {
         HStack {
             Text(name)
@@ -676,8 +690,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case bindings
     case edgeScroll
-    case permissions
     case pinnedImage
+    case permissions
     case data
 
     var id: Self { self }
@@ -686,10 +700,10 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "通用"
         case .bindings: return "手势绑定"
-        case .edgeScroll: return "边缘滚轮"
+        case .edgeScroll: return "边缘滚动"
         case .permissions: return "权限"
-        case .pinnedImage: return "贴图"
-        case .data: return "数据与检查"
+        case .pinnedImage: return "贴图与 OCR"
+        case .data: return "配置"
         }
     }
 
@@ -699,8 +713,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .bindings: return "管理轨迹、应用范围和执行动作"
         case .edgeScroll: return "左侧亮度与右侧音量控制"
         case .permissions: return "查看辅助功能、屏幕录制和输入监控状态"
-        case .pinnedImage: return "查看贴图的移动、折叠、透明度和复制操作"
-        case .data: return "导出、恢复并检查配置"
+        case .pinnedImage: return "贴图交互与离线文字识别说明"
+        case .data: return "导出、恢复并检查当前配置"
         }
     }
 
