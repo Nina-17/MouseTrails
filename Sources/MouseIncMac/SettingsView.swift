@@ -562,8 +562,12 @@ struct SettingsView: View {
                     model.draft.bindings.indices.contains(binding),
                     model.draft.bindings[binding].actions.indices.contains(action)
                 else { return }
-                model.draft.bindings[binding].actions[action].type = kind
-                model.draft.bindings[binding].actions[action].value = defaultValue(for: kind)
+                model.setActionType(
+                    kind,
+                    value: defaultValue(for: kind),
+                    actionIndex: action,
+                    bindingIndex: binding
+                )
             }
         )
     }

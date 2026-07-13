@@ -7,21 +7,56 @@ struct GesturePreview: View {
     var body: some View {
         GeometryReader { geometry in
             let points = previewPoints
-            Path { path in
-                guard let first = points.first else { return }
-                path.move(to: mapped(first, in: geometry.size, points: points))
-                for point in points.dropFirst() {
-                    path.addLine(to: mapped(point, in: geometry.size, points: points))
+            let mappedPoints = points.map { mapped($0, in: geometry.size, points: points) }
+            ZStack {
+                Path { path in
+                    guard let first = mappedPoints.first else { return }
+                    path.move(to: first)
+                    for point in mappedPoints.dropFirst() {
+                        path.addLine(to: point)
+                    }
                 }
+                .stroke(
+                    Color.accentColor,
+                    style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                )
+
+                directionArrow(for: mappedPoints)
+                    .stroke(
+                        Color.accentColor,
+                        style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
+                    )
             }
-            .stroke(
-                Color.accentColor,
-                style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round)
-            )
         }
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel("手势轨迹预览 \(identifier)")
+    }
+
+    private func directionArrow(for points: [CGPoint]) -> Path {
+        Path { path in
+            guard points.count >= 2, let tip = points.last else { return }
+            var previousIndex = points.count - 2
+            while previousIndex > 0,
+                  hypot(tip.x - points[previousIndex].x, tip.y - points[previousIndex].y) < 0.5 {
+                previousIndex -= 1
+            }
+            let previous = points[previousIndex]
+            let angle = atan2(tip.y - previous.y, tip.x - previous.x)
+            let length = 8.0
+            let spread = Double.pi / 5
+            let firstWing = CGPoint(
+                x: tip.x - length * cos(angle - spread),
+                y: tip.y - length * sin(angle - spread)
+            )
+            let secondWing = CGPoint(
+                x: tip.x - length * cos(angle + spread),
+                y: tip.y - length * sin(angle + spread)
+            )
+            path.move(to: firstWing)
+            path.addLine(to: tip)
+            path.addLine(to: secondWing)
+        }
     }
 
     private var previewPoints: [CGPoint] {

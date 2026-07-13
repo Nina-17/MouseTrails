@@ -11,7 +11,44 @@ final class SettingsViewModelTests: XCTestCase {
 
         let binding = model.draft.bindings.last
         XCTAssertEqual(binding?.gesture, "UP_RIGHT")
+        XCTAssertEqual(binding?.name, "居中窗口")
         XCTAssertEqual(binding?.actions, [.init(type: .windowAction, value: "center")])
+    }
+
+    func testExistingDefaultNameUsesFirstActionNameButCustomNameIsPreserved() {
+        var configuration = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "LEFT",
+                name: "新手势",
+                actions: [.init(type: .captureAction, value: CaptureAction.pinRegion.rawValue)]
+            ),
+            GestureBinding(
+                gesture: "RIGHT",
+                name: "我的操作",
+                actions: [.init(type: .ocrAction, value: OCRAction.recognizeRegion.rawValue)]
+            )
+        ])
+        configuration.enabled = true
+
+        let model = SettingsViewModel(configuration: configuration) { _ in }
+
+        XCTAssertEqual(model.draft.bindings[0].name, "生成贴图")
+        XCTAssertEqual(model.draft.bindings[1].name, "我的操作")
+    }
+
+    func testAddingFirstActionReplacesDefaultName() {
+        var configuration = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "新手势",
+                actions: []
+            )
+        ])
+        configuration.enabled = true
+        let model = SettingsViewModel(configuration: configuration) { _ in }
+        model.addAction(to: 0)
+
+        XCTAssertEqual(model.draft.bindings[0].name, "快捷键 Command+C")
     }
 
     func testInvalidDraftDoesNotSave() {

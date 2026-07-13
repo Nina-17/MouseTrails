@@ -19,7 +19,9 @@ final class SettingsViewModel: ObservableObject {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
     ) {
-        draft = configuration
+        var normalizedConfiguration = configuration
+        Self.replaceDefaultBindingNames(in: &normalizedConfiguration)
+        draft = normalizedConfiguration
         bindingIDs = configuration.bindings.map { _ in UUID() }
         self.saveHandler = saveHandler
         self.exportHandler = exportHandler
@@ -36,17 +38,20 @@ final class SettingsViewModel: ObservableObject {
 
     func reload(_ configuration: AppConfiguration) {
         bindingIDs = configuration.bindings.map { _ in UUID() }
-        draft = configuration
+        var normalizedConfiguration = configuration
+        Self.replaceDefaultBindingNames(in: &normalizedConfiguration)
+        draft = normalizedConfiguration
         saveMessage = nil
     }
 
     func addBinding() {
+        let action = ActionDefinition(type: .windowAction, value: WindowAction.center.rawValue)
         bindingIDs.append(UUID())
         draft.bindings.append(
             GestureBinding(
                 gesture: "UP_RIGHT",
-                name: "新手势",
-                actions: [.init(type: .windowAction, value: WindowAction.center.rawValue)]
+                name: Self.actionName(action),
+                actions: [action]
             )
         )
     }
@@ -96,9 +101,23 @@ final class SettingsViewModel: ObservableObject {
 
     func addAction(to bindingIndex: Int) {
         guard draft.bindings.indices.contains(bindingIndex) else { return }
-        draft.bindings[bindingIndex].actions.append(
-            .init(type: .keyStroke, value: "Command+C")
-        )
+        let action = ActionDefinition(type: .keyStroke, value: "Command+C")
+        draft.bindings[bindingIndex].actions.append(action)
+        updateDefaultNameIfNeeded(at: bindingIndex)
+    }
+
+    func setActionType(
+        _ kind: ActionDefinition.Kind,
+        value: String,
+        actionIndex: Int,
+        bindingIndex: Int
+    ) {
+        guard
+            draft.bindings.indices.contains(bindingIndex),
+            draft.bindings[bindingIndex].actions.indices.contains(actionIndex)
+        else { return }
+        draft.bindings[bindingIndex].actions[actionIndex] = ActionDefinition(type: kind, value: value)
+        updateDefaultNameIfNeeded(at: bindingIndex)
     }
 
     func removeAction(at actionIndex: Int, from bindingIndex: Int) {
@@ -141,6 +160,49 @@ final class SettingsViewModel: ObservableObject {
             saveMessage = "配置已恢复并生效"
         } catch {
             saveMessage = error.localizedDescription
+        }
+    }
+
+    private func updateDefaultNameIfNeeded(at bindingIndex: Int) {
+        guard
+            draft.bindings.indices.contains(bindingIndex),
+            draft.bindings[bindingIndex].name == "新手势",
+            let action = draft.bindings[bindingIndex].actions.first
+        else { return }
+        draft.bindings[bindingIndex].name = Self.actionName(action)
+    }
+
+    private static func replaceDefaultBindingNames(in configuration: inout AppConfiguration) {
+        for index in configuration.bindings.indices
+        where configuration.bindings[index].name == "新手势" {
+            guard let action = configuration.bindings[index].actions.first else { continue }
+            configuration.bindings[index].name = actionName(action)
+        }
+    }
+
+    private static func actionName(_ action: ActionDefinition) -> String {
+        switch action.type {
+        case .keyStroke: return "快捷键 \(action.value)"
+        case .openURL: return "打开 URL"
+        case .launchApplication: return "启动应用"
+        case .delay: return "延时"
+        case .windowAction:
+            switch WindowAction(rawValue: action.value) {
+            case .center: return "居中窗口"
+            case .maximize: return "切换全屏"
+            case .minimize: return "最小化窗口"
+            case .close: return "关闭窗口"
+            case nil: return "窗口操作"
+            }
+        case .captureAction:
+            switch CaptureAction(rawValue: action.value) {
+            case .pinRegion: return "生成贴图"
+            case .copyRegion: return "复制截图"
+            case .saveRegion: return "保存截图"
+            case nil: return "截图与贴图"
+            }
+        case .ocrAction: return "离线 OCR"
+        case .searchSelectedText: return "搜索选中文字"
         }
     }
 }
