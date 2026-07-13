@@ -4,33 +4,99 @@ import AppKit
 
 struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
+    @State private var selectedPage: SettingsPage = .general
+    @State private var selectedBindingID: UUID?
 
     var body: some View {
-        VStack(spacing: 0) {
+        NavigationSplitView {
+            List(SettingsPage.allCases, selection: $selectedPage) { page in
+                Label(page.title, systemImage: page.systemImage)
+                    .tag(page)
+            }
+            .listStyle(.sidebar)
+            .navigationTitle("MouseIncMac")
+            .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
+        } detail: {
+            VStack(spacing: 0) {
+                pageHeader
+                Divider()
+                pageContent
+                saveBar
+            }
+        }
+        .frame(minWidth: 920, minHeight: 680)
+        .onAppear { selectFirstBindingIfNeeded() }
+        .onChange(of: model.bindingIDs) { _ in selectFirstBindingIfNeeded() }
+    }
+
+    private var pageHeader: some View {
+        HStack(spacing: 14) {
+            Image(systemName: selectedPage.systemImage)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 34)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(selectedPage.title)
+                    .font(.title2.weight(.semibold))
+                Text(selectedPage.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
+        switch selectedPage {
+        case .general:
             Form {
                 gestureSection
                 sequenceSection
-                edgeScrollSection
-                bindingsSection
+            }
+            .formStyle(.grouped)
+        case .bindings:
+            bindingsWorkspace
+        case .edgeScroll:
+            Form { edgeScrollSection }
+                .formStyle(.grouped)
+        case .permissions:
+            Form {
                 permissionSection
                 pinnedImageHelpSection
+            }
+            .formStyle(.grouped)
+        case .data:
+            Form {
                 configurationFilesSection
                 validationSection
             }
             .formStyle(.grouped)
+        }
+    }
 
+    private var saveBar: some View {
+        VStack(spacing: 0) {
             Divider()
-            HStack {
-                Text(model.saveMessage ?? "Schema \(AppConfiguration.currentSchemaVersion) 配置")
+            HStack(spacing: 10) {
+                Image(systemName: model.canSave ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(model.canSave ? Color.green : Color.red)
+                Text(model.saveMessage ?? (model.canSave ? "配置有效" : "请修复配置错误"))
                     .foregroundStyle(model.canSave ? Color.secondary : Color.red)
                 Spacer()
-                Button("保存") { model.save() }
+                Text("Schema \(AppConfiguration.currentSchemaVersion)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                Button("保存并应用") { model.save() }
                     .keyboardShortcut("s", modifiers: .command)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!model.canSave)
             }
-            .padding()
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
-        .frame(minWidth: 720, minHeight: 620)
     }
 
     private var gestureSection: some View {
@@ -90,27 +156,122 @@ struct SettingsView: View {
         }
     }
 
-    private var bindingsSection: some View {
-        Section("手势绑定") {
-            ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { bindingIndex, _ in
-                bindingEditor(at: bindingIndex)
+    private var bindingsWorkspace: some View {
+        HSplitView {
+            VStack(spacing: 0) {
+                List(selection: $selectedBindingID) {
+                    ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
+                        bindingListRow(at: index)
+                            .tag(id)
+                    }
+                }
+                .listStyle(.sidebar)
+
+                Divider()
+                HStack {
+                    Button {
+                        model.addBinding()
+                        selectedBindingID = model.bindingIDs.last
+                    } label: {
+                        Label("添加", systemImage: "plus")
+                    }
+                    Spacer()
+                    Text("\(model.draft.bindings.count) 个绑定")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(10)
             }
-            Button {
-                model.addBinding()
-            } label: {
-                Label("添加手势绑定", systemImage: "plus")
+            .frame(minWidth: 240, idealWidth: 270, maxWidth: 320)
+
+            if let index = selectedBindingIndex {
+                ScrollView {
+                    bindingEditor(at: index)
+                        .padding(24)
+                        .frame(maxWidth: 760, alignment: .topLeading)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 12) {
+                    Image(systemName: "scribble.variable")
+                        .font(.system(size: 42))
+                        .foregroundStyle(.tertiary)
+                    Text("选择一个手势绑定")
+                        .font(.title3.weight(.medium))
+                    Text("从左侧选择绑定，或添加一个新的手势。")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func bindingListRow(at index: Int) -> some View {
+        if let binding = model.binding(at: index) {
+            HStack(spacing: 10) {
+                GesturePreview(identifier: binding.gesture)
+                    .frame(width: 54, height: 42)
+                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(binding.name.isEmpty ? "未命名手势" : binding.name)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(displayName(for: binding.gesture))
+                        Text("·")
+                        Text(binding.bundleIdentifiers.isEmpty ? "全局" : "指定应用")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if model.issues(for: index).contains(where: { $0.severity == .error }) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 
     @ViewBuilder
     private func bindingEditor(at index: Int) -> some View {
         if let binding = model.binding(at: index) {
-          VStack(alignment: .leading, spacing: 10) {
-            HStack {
+          VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 16) {
                 GesturePreview(identifier: binding.gesture)
-                    .frame(width: 90, height: 64)
-                TextField("名称", text: bindingText(at: index, keyPath: \.name))
+                    .frame(width: 112, height: 82)
+                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("手势名称", text: bindingText(at: index, keyPath: \.name))
+                        .font(.title3.weight(.semibold))
+                    Text("\(displayName(for: binding.gesture)) · \(binding.bundleIdentifiers.isEmpty ? "全局生效" : "仅指定应用")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { model.moveBinding(from: index, by: -1) } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .help("上移")
+                .disabled(index == 0)
+                Button { model.moveBinding(from: index, by: 1) } label: {
+                    Image(systemName: "arrow.down")
+                }
+                .help("下移")
+                .disabled(index == model.draft.bindings.count - 1)
+                Button(role: .destructive) { removeBinding(at: index) } label: {
+                    Image(systemName: "trash")
+                }
+                .help("删除")
+            }
+
+            GroupBox("手势") {
+              VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                  Text("轨迹类型")
+                    .frame(width: 90, alignment: .leading)
                 Menu {
                     Section("单方向") {
                         gestureChoices(cardinalGestureChoices, bindingIndex: index)
@@ -124,45 +285,59 @@ struct SettingsView: View {
                 } label: {
                     Label(displayName(for: binding.gesture), systemImage: "scribble.variable")
                 }
-                .frame(minWidth: 130)
-                TextField("手势标识", text: bindingText(at: index, keyPath: \.gesture))
-                    .frame(minWidth: 120)
-                Button { model.moveBinding(from: index, by: -1) } label: {
-                    Image(systemName: "arrow.up")
+                .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .disabled(index == 0)
-                Button { model.moveBinding(from: index, by: 1) } label: {
-                    Image(systemName: "arrow.down")
+                HStack {
+                    Text("内部标识")
+                        .frame(width: 90, alignment: .leading)
+                    TextField("手势标识", text: bindingText(at: index, keyPath: \.gesture))
                 }
-                .disabled(index == model.draft.bindings.count - 1)
-                Button(role: .destructive) { model.removeBinding(at: index) } label: {
-                    Image(systemName: "trash")
-                }
-            }
-            HStack {
-                TextField("Bundle ID（逗号分隔；留空表示全局）", text: bundleIDsBinding(at: index))
-                Button("选择应用…") { chooseApplication(for: index) }
+              }
+              .padding(10)
             }
 
-            ForEach(binding.actions.indices, id: \.self) { actionIndex in
-                HStack {
+            GroupBox("应用范围") {
+              HStack {
+                TextField("Bundle ID（留空表示全局；多个以逗号分隔）", text: bundleIDsBinding(at: index))
+                Button("选择应用…") { chooseApplication(for: index) }
+              }
+              .padding(10)
+            }
+
+            GroupBox("执行动作") {
+              VStack(alignment: .leading, spacing: 10) {
+                ForEach(binding.actions.indices, id: \.self) { actionIndex in
+                  HStack(alignment: .center, spacing: 10) {
+                    Text("\(actionIndex + 1)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20)
                     Picker("", selection: actionTypeBinding(binding: index, action: actionIndex)) {
                         ForEach(ActionCatalog.descriptors, id: \.kind) { descriptor in
                             Text(descriptor.displayName).tag(descriptor.kind)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 140)
+                    .frame(width: 150)
                     actionValueEditor(binding: index, action: actionIndex)
                     Button(role: .destructive) {
                         model.removeAction(at: actionIndex, from: index)
                     } label: {
                         Image(systemName: "minus.circle")
                     }
+                    .buttonStyle(.plain)
+                    .help("移除动作")
+                  }
+                  .padding(10)
+                  .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 9))
                 }
+                Button { model.addAction(to: index) } label: {
+                    Label("添加动作", systemImage: "plus.circle")
+                }
+              }
+              .padding(10)
             }
-            Button("添加动作") { model.addAction(to: index) }
-                .buttonStyle(.link)
+
             ForEach(Array(model.issues(for: index).enumerated()), id: \.offset) { _, issue in
                 Label(issue.message, systemImage: issue.severity == .error
                       ? "exclamationmark.triangle.fill" : "info.circle.fill")
@@ -170,7 +345,6 @@ struct SettingsView: View {
                     .foregroundStyle(issue.severity == .error ? Color.red : Color.orange)
             }
           }
-          .padding(.vertical, 6)
         }
     }
 
@@ -274,6 +448,28 @@ struct SettingsView: View {
         case .notDetermined: return "未请求"
         case .unavailable: return "不可用"
         }
+    }
+
+    private var selectedBindingIndex: Int? {
+        guard let selectedBindingID else { return nil }
+        return model.bindingIDs.firstIndex(of: selectedBindingID)
+    }
+
+    private func selectFirstBindingIfNeeded() {
+        if let selectedBindingID, model.bindingIDs.contains(selectedBindingID) {
+            return
+        }
+        selectedBindingID = model.bindingIDs.first
+    }
+
+    private func removeBinding(at index: Int) {
+        let nextID: UUID? = {
+            if model.bindingIDs.indices.contains(index + 1) { return model.bindingIDs[index + 1] }
+            if index > 0, model.bindingIDs.indices.contains(index - 1) { return model.bindingIDs[index - 1] }
+            return nil
+        }()
+        model.removeBinding(at: index)
+        selectedBindingID = nextID
     }
 
     private func numberField(_ title: String, value: Binding<Double>) -> some View {
@@ -472,6 +668,46 @@ struct SettingsView: View {
     private func ocrActionName(_ action: OCRAction) -> String {
         switch action {
         case .recognizeRegion: return "识别、复制并通知"
+        }
+    }
+}
+
+private enum SettingsPage: String, CaseIterable, Identifiable {
+    case general
+    case bindings
+    case edgeScroll
+    case permissions
+    case data
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .general: return "通用"
+        case .bindings: return "手势绑定"
+        case .edgeScroll: return "边缘滚轮"
+        case .permissions: return "权限与贴图"
+        case .data: return "数据与检查"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .general: return "手势识别、轨迹外观和动作序列"
+        case .bindings: return "管理轨迹、应用范围和执行动作"
+        case .edgeScroll: return "左侧亮度与右侧音量控制"
+        case .permissions: return "系统授权状态和贴图使用说明"
+        case .data: return "导出、恢复并检查配置"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .general: return "gearshape"
+        case .bindings: return "scribble.variable"
+        case .edgeScroll: return "arrow.up.and.down.and.arrow.left.and.right"
+        case .permissions: return "lock.shield"
+        case .data: return "externaldrive"
         }
     }
 }

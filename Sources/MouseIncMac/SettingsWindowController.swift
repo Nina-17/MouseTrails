@@ -21,8 +21,10 @@ final class SettingsWindowController: NSWindowController {
         let hostingController = NSHostingController(rootView: SettingsView(model: model))
         let window = NSWindow(contentViewController: hostingController)
         window.title = "MouseIncMac 设置"
-        window.setContentSize(NSSize(width: 760, height: 700))
+        window.setContentSize(NSSize(width: 1040, height: 740))
+        window.minSize = NSSize(width: 920, height: 680)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
