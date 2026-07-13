@@ -1,8 +1,8 @@
-# MouseIncMac 分阶段实现计划
+# MouseTrails 分阶段实现计划
 
 最后更新：2026-07-11
 
-本文档是 MouseIncMac 的实施路线图，用于组织开发顺序、并行边界、验收条件和发布门槛。功能映射与技术边界见 [PORTING_SPEC.md](PORTING_SPEC.md)。
+本文档是 MouseTrails 的实施路线图，用于组织开发顺序、并行边界、验收条件和发布门槛。功能映射与技术边界见 [PORTING_SPEC.md](PORTING_SPEC.md)。
 
 ## 1. 总体目标
 
@@ -56,7 +56,7 @@ P0/P1 的基线提交为 `4741279`，当前应用版本为 `0.12.0 (26)`。
 - `swift test`
 - `swift run MouseIncCoreCheck`
 - `swift build -c release`
-- `codesign --verify --deep --strict ~/Applications/MouseIncMac.app`
+- `codesign --verify --deep --strict ~/Applications/MouseTrails.app`
 - 普通右键、成功手势、未绑定手势和超时手势的真机验收
 
 ## 4. P1：触控板兼容
@@ -189,7 +189,7 @@ Sources/MouseIncMac/
 
 ### P2B-2：截图、贴图与 OCR
 
-状态：已完成最终真机复验。截图、基础贴图、Vision 离线中英文 OCR、自动复制与截断摘要通知已通过验收；截图管线保留完整屏幕合成内容，可识别 MouseIncMac 自身的设置窗口，不再穿透到后方应用。贴图支持 20%–100% 透明度调节、多贴图独立生命周期、展开态 Command+C 复制，以及缩小态右键另存 PNG；贴图 OCR、方向键移动和 Option 修饰键均已移除以保持交互简洁。方框容错采用三条相邻边访问与宽松趋势评分，区分 `SQUARE_CLOCKWISE` / `SQUARE_COUNTERCLOCKWISE`，已通过真机验收。
+状态：已完成最终真机复验。截图、基础贴图、Vision 离线中英文 OCR、自动复制与截断摘要通知已通过验收；截图管线保留完整屏幕合成内容，可识别 MouseTrails 自身的设置窗口，不再穿透到后方应用。贴图支持 20%–100% 透明度调节、多贴图独立生命周期、展开态 Command+C 复制，以及缩小态右键另存 PNG；贴图 OCR、方向键移动和 Option 修饰键均已移除以保持交互简洁。方框容错采用三条相邻边访问与宽松趋势评分，区分 `SQUARE_CLOCKWISE` / `SQUARE_COUNTERCLOCKWISE`，已通过真机验收。
 
 交付：
 

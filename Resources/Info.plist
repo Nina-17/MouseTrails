@@ -11,18 +11,22 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>MouseIncMac</string>
+    <string>MouseTrails</string>
+    <key>CFBundleDisplayName</key>
+    <string>MouseTrails</string>
+    <key>CFBundleIconFile</key>
+    <string>MouseTrails</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.12.5</string>
+    <string>0.13.0</string>
     <key>CFBundleVersion</key>
-    <string>31</string>
+    <string>32</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>MouseIncMac 的后续截图、贴图与 OCR 功能需要读取您选择的屏幕区域。</string>
+    <string>MouseTrails 的截图、贴图与 OCR 功能需要读取您选择的屏幕区域。</string>
 </dict>
 </plist>

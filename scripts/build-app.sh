@@ -7,14 +7,17 @@ cd "$ROOT"
 
 swift build -c release
 
-APP="$ROOT/.build/MouseIncMac.app"
+APP="$ROOT/.build/MouseTrails.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
+RESOURCES="$CONTENTS/Resources"
 
 rm -rf "$APP"
 mkdir -p "$MACOS"
 cp "$ROOT/.build/release/MouseIncMac" "$MACOS/MouseIncMac"
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
+mkdir -p "$RESOURCES"
+cp "$ROOT/Resources/MouseTrails.icns" "$RESOURCES/MouseTrails.icns"
 
 if command -v codesign >/dev/null 2>&1; then
     IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \

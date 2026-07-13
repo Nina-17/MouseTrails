@@ -1,6 +1,6 @@
-# MouseInc for macOS
+# MouseTrails
 
-MouseInc Windows 版的原生 macOS 功能重实现。当前已完成 P0、P1、P2-0，并交付 P2A/P2B 的首个可用切片：
+MouseInc Windows 版概念的原生 macOS 手势工具，现以 MouseTrails 名称发布。当前已完成 P0、P1、P2-0，并交付 P2A/P2B 的首个可用切片：
 
 - 菜单栏常驻应用
 - 辅助功能权限检查
@@ -29,12 +29,12 @@ MouseInc Windows 版的原生 macOS 功能重实现。当前已完成 P0、P1、
 swift test
 swift run MouseIncCoreCheck
 ./scripts/build-app.sh
-open .build/MouseIncMac.app
+open .build/MouseTrails.app
 ```
 
-首次运行需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 MouseIncMac。P0/P1 仍只需要辅助功能权限，不需要输入监控或屏幕录制。授权后返回菜单栏图标，确认状态显示为“监听状态：已启动”；若仍未启动，退出并重新打开应用。
+首次运行需要在“系统设置 → 隐私与安全性 → 辅助功能”中允许 MouseTrails。P0/P1 仍只需要辅助功能权限，不需要输入监控或屏幕录制。授权后返回菜单栏图标，确认状态显示为“监听状态：已启动”；若仍未启动，退出并重新打开应用。
 
-如果正在使用 Ice 等菜单栏管理工具，MouseIncMac 可能被归入隐藏区。请在 Ice 中将 `MI` 拖入可见区；检测到 Ice 运行时，MouseIncMac 也会显示 Dock 图标作为设置备用入口。
+如果正在使用 Ice 等菜单栏管理工具，MouseTrails 可能被归入隐藏区。请在 Ice 中将 `MT` 拖入可见区；检测到 Ice 运行时，MouseTrails 也会显示 Dock 图标作为设置备用入口。
 
 ## 鼠标与触控板操作
 
@@ -46,7 +46,7 @@ open .build/MouseIncMac.app
 
 “轻触来点按”形式的辅助右键会很快结束点击，不能维持按下状态，因此无法持续绘制轨迹。请使用可以持续按住的辅助点击方式；可在菜单栏中选择“打开触控板设置…”调整系统设置。
 
-MouseIncMac 不拦截双指滚动、捏合缩放、Mission Control 或系统的三/四指手势，这些操作仍完全由 macOS 处理。
+MouseTrails 不拦截双指滚动、捏合缩放、Mission Control 或系统的三/四指手势，这些操作仍完全由 macOS 处理。
 
 配置文件位置：
 

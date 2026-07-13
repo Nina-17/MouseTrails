@@ -17,7 +17,7 @@ final class CaptureCoordinator: NSObject {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             presentError(
                 title: "需要屏幕录制权限",
-                message: "请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 MouseIncMac，然后重新触发手势。"
+                message: "请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 MouseTrails，然后重新触发手势。"
             )
             return false
         }
@@ -41,7 +41,7 @@ final class CaptureCoordinator: NSObject {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             presentError(
                 title: "需要屏幕录制权限",
-                message: "请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 MouseIncMac，然后重新触发手势。"
+                message: "请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中允许 MouseTrails，然后重新触发手势。"
             )
             return false
         }
@@ -134,7 +134,7 @@ final class CaptureCoordinator: NSObject {
             }
 
             // Capture the same composited content the user sees, including
-            // MouseIncMac's settings and pinned-image windows. The gesture
+            // MouseTrails' settings and pinned-image windows. The gesture
             // overlay is ordered out before actions execute, so excluding the
             // entire application would only make its normal windows appear
             // transparent and expose whatever is behind them.
@@ -238,7 +238,7 @@ final class CaptureCoordinator: NSObject {
     private func save(_ image: CGImage) throws {
         let panel = NSSavePanel()
         panel.title = "保存截图"
-        panel.nameFieldStringValue = "MouseIncMac-截图.png"
+        panel.nameFieldStringValue = "MouseTrails-截图.png"
         panel.allowedContentTypes = [.png]
         guard panel.runModal() == .OK, let url = panel.url else { throw CaptureError.cancelled }
         guard
@@ -630,7 +630,7 @@ private final class PinnedImageView: NSImageView {
             create: true
         ).appendingPathComponent("MouseIncMac/PinnedClipboard", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let url = root.appendingPathComponent("MouseIncMac-贴图-\(UUID().uuidString).png")
+        let url = root.appendingPathComponent("MouseTrails-贴图-\(UUID().uuidString).png")
         try data.write(to: url, options: .atomic)
         return url
     }
@@ -652,7 +652,7 @@ private final class PinnedImageView: NSImageView {
             .representation(using: .png, properties: [:]) else { return }
         let panel = NSSavePanel()
         panel.title = "保存贴图"
-        panel.nameFieldStringValue = "MouseIncMac-贴图.png"
+        panel.nameFieldStringValue = "MouseTrails-贴图.png"
         panel.allowedContentTypes = [.png]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {

@@ -16,7 +16,7 @@ struct SettingsView: View {
                     .tag(page)
             }
             .listStyle(.sidebar)
-            .navigationTitle("MouseIncMac")
+            .navigationTitle("MouseTrails")
             .navigationSplitViewColumnWidth(min: 170, ideal: 190, max: 220)
         } detail: {
             VStack(spacing: 0) {
@@ -656,8 +656,8 @@ struct SettingsView: View {
 
     private func exportConfiguration() {
         let panel = NSSavePanel()
-        panel.title = "导出 MouseIncMac 配置"
-        panel.nameFieldStringValue = "MouseIncMac-config.json"
+        panel.title = "导出 MouseTrails 配置"
+        panel.nameFieldStringValue = "MouseTrails-config.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         model.export(to: url)
@@ -665,7 +665,7 @@ struct SettingsView: View {
 
     private func restoreConfiguration() {
         let panel = NSOpenPanel()
-        panel.title = "选择 MouseIncMac 配置备份"
+        panel.title = "选择 MouseTrails 配置备份"
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }

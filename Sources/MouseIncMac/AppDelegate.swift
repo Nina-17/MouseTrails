@@ -77,12 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "cursorarrow.motionlines",
-                accessibilityDescription: "MouseIncMac"
+                accessibilityDescription: "MouseTrails"
             )
             button.image?.isTemplate = true
             button.imagePosition = .imageLeading
-            button.title = "MI"
-            button.toolTip = "MouseIncMac"
+            button.title = "MT"
+            button.toolTip = "MouseTrails"
         }
 
         let menu = NSMenu()
@@ -181,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
 
         let quitItem = NSMenuItem(
-            title: "退出 MouseIncMac",
+            title: "退出 MouseTrails",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -216,9 +216,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mainMenu = NSMenu()
 
         let applicationItem = NSMenuItem()
-        let applicationMenu = NSMenu(title: "MouseIncMac")
+        let applicationMenu = NSMenu(title: "MouseTrails")
         applicationMenu.addItem(
-            withTitle: "关于 MouseIncMac",
+            withTitle: "关于 MouseTrails",
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
@@ -232,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applicationMenu.addItem(settingsItem)
         applicationMenu.addItem(.separator())
         applicationMenu.addItem(
-            withTitle: "隐藏 MouseIncMac",
+            withTitle: "隐藏 MouseTrails",
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
@@ -249,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         applicationMenu.addItem(.separator())
         applicationMenu.addItem(
-            withTitle: "退出 MouseIncMac",
+            withTitle: "退出 MouseTrails",
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
