@@ -412,9 +412,9 @@ struct SettingsView: View {
 
     private func captureActionName(_ action: CaptureAction) -> String {
         switch action {
-        case .pinRegion: return "框选并生成贴图"
-        case .copyRegion: return "框选并复制"
-        case .saveRegion: return "框选并保存"
+        case .pinRegion: return "按手势范围生成贴图"
+        case .copyRegion: return "按手势范围复制"
+        case .saveRegion: return "按手势范围保存"
         }
     }
 }

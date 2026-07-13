@@ -31,8 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureVisibilityFallback()
 
         let overlay = GestureOverlay()
-        let executor = ActionExecutor(captureActionHandler: { [weak self] action in
-            self?.captureCoordinator.perform(action) ?? false
+        let executor = ActionExecutor(captureActionHandler: { [weak self] action, gestureBounds in
+            self?.captureCoordinator.perform(action, gestureBounds: gestureBounds) ?? false
         })
         let monitor = GestureMonitor(
             configuration: { [weak self] in self?.configuration ?? AppConfiguration() },

@@ -3,9 +3,17 @@ import MouseIncCore
 
 @MainActor
 final class ActionExecutor {
+    struct ExecutionContext: Equatable, Sendable {
+        var gestureBounds: CGRect?
+
+        init(gestureBounds: CGRect? = nil) {
+            self.gestureBounds = gestureBounds
+        }
+    }
+
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
-    typealias CaptureActionHandler = @MainActor (CaptureAction) -> Bool
+    typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
@@ -18,7 +26,7 @@ final class ActionExecutor {
             DiagnosticLogger.shared.log(event: event, metadata: metadata)
         },
         windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
-        captureActionHandler: @escaping CaptureActionHandler = { _ in false }
+        captureActionHandler: @escaping CaptureActionHandler = { _, _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
@@ -31,7 +39,8 @@ final class ActionExecutor {
 
     func execute(
         _ actions: [ActionDefinition],
-        options: ActionSequenceOptions = ActionSequenceOptions()
+        options: ActionSequenceOptions = ActionSequenceOptions(),
+        context: ExecutionContext = ExecutionContext()
     ) {
         if executionTask != nil {
             switch options.interruptionPolicy {
@@ -59,7 +68,7 @@ final class ActionExecutor {
                     )
                 } else {
                     guard let self else { return }
-                    succeeded = self.executeImmediately(action)
+                    succeeded = self.executeImmediately(action, context: context)
                 }
 
                 guard !Task.isCancelled else { return }
@@ -86,7 +95,7 @@ final class ActionExecutor {
         eventLogger(.actionSequenceCancelled, [:])
     }
 
-    private func executeImmediately(_ action: ActionDefinition) -> Bool {
+    private func executeImmediately(_ action: ActionDefinition, context: ExecutionContext) -> Bool {
         switch action.type {
         case .keyStroke:
             return sendKeyStroke(action.value)
@@ -104,7 +113,7 @@ final class ActionExecutor {
             return windowActionHandler(windowAction)
         case .captureAction:
             guard let captureAction = CaptureAction(rawValue: action.value) else { return false }
-            return captureActionHandler(captureAction)
+            return captureActionHandler(captureAction, context.gestureBounds)
         }
     }
 

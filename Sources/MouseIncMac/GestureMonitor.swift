@@ -200,7 +200,8 @@ final class GestureMonitor: NSObject {
                     ) {
                         executor.execute(
                             binding.actions,
-                            options: configuration.actionSequenceOptions
+                            options: configuration.actionSequenceOptions,
+                            context: .init(gestureBounds: Self.boundingRect(of: points))
                         )
                         logger.info("Gesture matched: \(gesture, privacy: .public)")
                         DiagnosticLogger.shared.log("Gesture matched: \(gesture); action=\(binding.name)")
@@ -238,6 +239,13 @@ final class GestureMonitor: NSObject {
 
         default:
             return Unmanaged.passUnretained(event)
+        }
+    }
+
+    private static func boundingRect(of points: [CGPoint]) -> CGRect? {
+        guard let first = points.first else { return nil }
+        return points.dropFirst().reduce(CGRect(origin: first, size: .zero)) { rect, point in
+            rect.union(CGRect(origin: point, size: .zero))
         }
     }
 

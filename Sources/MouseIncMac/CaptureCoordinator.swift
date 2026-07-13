@@ -8,15 +8,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class CaptureCoordinator: NSObject {
-    private var selectionController: RegionSelectionController?
     private var pinnedWindows: [PinnedImageWindowController] = []
 
-    func perform(_ action: CaptureAction) -> Bool {
-        guard selectionController == nil else {
-            DiagnosticLogger.shared.log("Capture ignored because a selection is already active")
-            return false
-        }
-
+    func perform(_ action: CaptureAction, gestureBounds: CGRect?) -> Bool {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             presentError(
                 title: "需要屏幕录制权限",
@@ -25,20 +19,17 @@ final class CaptureCoordinator: NSObject {
             return false
         }
 
-        let controller = RegionSelectionController { [weak self] rect in
-            guard let self else { return }
-            self.selectionController = nil
-            guard let rect else {
-                DiagnosticLogger.shared.log("Capture selection cancelled")
-                return
-            }
-            Task { @MainActor [weak self] in
-                await self?.capture(rect: rect, action: action)
-            }
+        guard let gestureBounds, gestureBounds.width >= 4, gestureBounds.height >= 4 else {
+            presentError(
+                title: "手势范围不足",
+                message: "截图动作需要由包含有效宽度和高度的手势触发。"
+            )
+            return false
         }
-        selectionController = controller
-        controller.begin()
-        DiagnosticLogger.shared.log("Capture selection started; action=\(action.rawValue)")
+        Task { @MainActor [weak self] in
+            await self?.capture(rect: gestureBounds, action: action)
+        }
+        DiagnosticLogger.shared.log("Capture started from gesture bounds; action=\(action.rawValue)")
         return true
     }
 
@@ -292,140 +283,6 @@ private final class OneFrameStreamCapture: NSObject, SCStreamOutput, @unchecked 
 }
 
 @MainActor
-private final class RegionSelectionController {
-    typealias Completion = (CGRect?) -> Void
-
-    private let completion: Completion
-    private var panel: CaptureSelectionPanel?
-    private var didFinish = false
-
-    init(completion: @escaping Completion) {
-        self.completion = completion
-    }
-
-    func begin() {
-        guard let union = NSScreen.screens.map(\.frame).reduce(nil, { partial, frame in
-            partial.map { $0.union(frame) } ?? frame
-        }) else {
-            finish(nil)
-            return
-        }
-
-        let panel = CaptureSelectionPanel(
-            contentRect: union,
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: false
-        )
-        let view = CaptureSelectionView(frame: CGRect(origin: .zero, size: union.size))
-        view.onComplete = { [weak self] localRect in
-            guard let self, let panel = self.panel else { return }
-            let origin = panel.convertPoint(toScreen: localRect.origin)
-            self.finish(CGRect(origin: origin, size: localRect.size))
-        }
-        view.onCancel = { [weak self] in self?.finish(nil) }
-        panel.onCancel = { [weak self] in self?.finish(nil) }
-        panel.contentView = view
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
-        panel.hasShadow = false
-        panel.level = .screenSaver
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.isReleasedWhenClosed = false
-        self.panel = panel
-        NSCursor.crosshair.push()
-        panel.makeKeyAndOrderFront(nil)
-        panel.makeFirstResponder(view)
-    }
-
-    private func finish(_ rect: CGRect?) {
-        guard !didFinish else { return }
-        didFinish = true
-        NSCursor.pop()
-        panel?.orderOut(nil)
-        panel?.close()
-        panel = nil
-        completion(rect)
-    }
-}
-
-private final class CaptureSelectionPanel: NSPanel {
-    var onCancel: (() -> Void)?
-
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
-
-    override func cancelOperation(_ sender: Any?) {
-        onCancel?()
-    }
-}
-
-private final class CaptureSelectionView: NSView {
-    var onComplete: ((CGRect) -> Void)?
-    var onCancel: (() -> Void)?
-    private var startPoint: CGPoint?
-    private var currentPoint: CGPoint?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let shade = NSBezierPath(rect: bounds)
-        if let selectionRect, selectionRect.width > 0, selectionRect.height > 0 {
-            shade.appendRect(selectionRect)
-        }
-        shade.windingRule = .evenOdd
-        NSColor.black.withAlphaComponent(0.35).setFill()
-        shade.fill()
-
-        if let selectionRect {
-            NSColor.white.setStroke()
-            let outline = NSBezierPath(rect: selectionRect.insetBy(dx: 0.5, dy: 0.5))
-            outline.lineWidth = 1
-            outline.stroke()
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        startPoint = convert(event.locationInWindow, from: nil)
-        currentPoint = startPoint
-        needsDisplay = true
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        currentPoint = convert(event.locationInWindow, from: nil)
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        currentPoint = convert(event.locationInWindow, from: nil)
-        guard let rect = selectionRect, rect.width >= 4, rect.height >= 4 else {
-            onCancel?()
-            return
-        }
-        onComplete?(rect)
-    }
-
-    override func keyDown(with event: NSEvent) {
-        if event.keyCode == 53 {
-            onCancel?()
-        } else {
-            super.keyDown(with: event)
-        }
-    }
-
-    private var selectionRect: CGRect? {
-        guard let startPoint, let currentPoint else { return nil }
-        return CGRect(
-            x: min(startPoint.x, currentPoint.x),
-            y: min(startPoint.y, currentPoint.y),
-            width: abs(currentPoint.x - startPoint.x),
-            height: abs(currentPoint.y - startPoint.y)
-        )
-    }
-}
-
-@MainActor
 private final class PinnedImageWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
 
@@ -475,56 +332,71 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
 }
 
 private final class PinnedImageView: NSImageView {
+    private var expandedFrame: CGRect?
+    private var isCompact = false
+
     init(image: NSImage) {
         super.init(frame: .zero)
         self.image = image
         imageScaling = .scaleProportionallyUpOrDown
         imageAlignment = .alignCenter
-        menu = makeContextMenu()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func makeContextMenu() -> NSMenu {
-        let menu = NSMenu()
-        let copyItem = NSMenuItem(title: "复制贴图", action: #selector(copyImage), keyEquivalent: "")
-        copyItem.target = self
-        menu.addItem(copyItem)
-        let saveItem = NSMenuItem(title: "保存贴图…", action: #selector(saveImage), keyEquivalent: "")
-        saveItem.target = self
-        menu.addItem(saveItem)
-        menu.addItem(.separator())
-        let closeItem = NSMenuItem(title: "关闭贴图", action: #selector(closeWindow), keyEquivalent: "")
-        closeItem.target = self
-        menu.addItem(closeItem)
-        return menu
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        let initialMouse = NSEvent.mouseLocation
+        let initialOrigin = window.frame.origin
+        var didDrag = false
+
+        while let nextEvent = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            switch nextEvent.type {
+            case .leftMouseDragged:
+                let currentMouse = NSEvent.mouseLocation
+                let delta = CGPoint(
+                    x: currentMouse.x - initialMouse.x,
+                    y: currentMouse.y - initialMouse.y
+                )
+                if hypot(delta.x, delta.y) >= 2 { didDrag = true }
+                window.setFrameOrigin(
+                    CGPoint(x: initialOrigin.x + delta.x, y: initialOrigin.y + delta.y)
+                )
+            case .leftMouseUp:
+                if !didDrag { toggleCompact() }
+                return
+            default:
+                break
+            }
+        }
     }
 
-    @objc private func copyImage() {
-        guard let image else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([image])
-    }
-
-    @objc private func saveImage() {
-        guard
-            let image,
-            let data = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: data),
-            let png = bitmap.representation(using: .png, properties: [:])
-        else { return }
-        let panel = NSSavePanel()
-        panel.title = "保存贴图"
-        panel.nameFieldStringValue = "MouseIncMac-贴图.png"
-        panel.allowedContentTypes = [.png]
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        try? png.write(to: url, options: .atomic)
-    }
-
-    @objc private func closeWindow() {
+    override func rightMouseDown(with event: NSEvent) {
         window?.close()
+    }
+
+    private func toggleCompact() {
+        guard let window else { return }
+        if isCompact, let expandedFrame {
+            imageScaling = .scaleProportionallyUpOrDown
+            window.setFrame(expandedFrame, display: true, animate: true)
+            isCompact = false
+            return
+        }
+
+        expandedFrame = window.frame
+        let side: CGFloat = 72
+        let compactFrame = CGRect(
+            x: window.frame.midX - side / 2,
+            y: window.frame.maxY - side,
+            width: side,
+            height: side
+        )
+        imageScaling = .scaleNone
+        imageAlignment = .alignCenter
+        window.setFrame(compactFrame, display: true, animate: true)
+        isCompact = true
     }
 }

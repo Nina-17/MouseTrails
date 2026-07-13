@@ -146,7 +146,7 @@ public enum ActionCatalog {
             ActionDescriptor(
                 kind: .captureAction,
                 displayName: "截图与贴图",
-                valueDescription: "框选后贴图、复制或保存",
+                valueDescription: "按手势范围贴图、复制或保存",
                 requiredPermissions: [.screenRecording]
             )
         }

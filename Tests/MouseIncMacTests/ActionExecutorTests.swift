@@ -82,13 +82,17 @@ final class ActionExecutorTests: XCTestCase {
         let executor = ActionExecutor(
             eventLogger: { _, _ in },
             windowActionHandler: { _ in true },
-            captureActionHandler: { action in
+            captureActionHandler: { action, bounds in
                 receivedAction = action
+                XCTAssertEqual(bounds, CGRect(x: 10, y: 20, width: 30, height: 40))
                 return true
             }
         )
 
-        executor.execute([.init(type: .captureAction, value: CaptureAction.pinRegion.rawValue)])
+        executor.execute(
+            [.init(type: .captureAction, value: CaptureAction.pinRegion.rawValue)],
+            context: .init(gestureBounds: CGRect(x: 10, y: 20, width: 30, height: 40))
+        )
         try await Task.sleep(nanoseconds: 20_000_000)
 
         XCTAssertEqual(receivedAction, .pinRegion)
