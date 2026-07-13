@@ -86,12 +86,11 @@ private final class GestureTraceView: NSView {
     }
 
     private var trailNSColor: NSColor {
-        switch color {
-        case .orange: return .systemOrange
-        case .blue: return .systemBlue
-        case .green: return .systemGreen
-        case .pink: return .systemPink
-        case .purple: return .systemPurple
-        }
+        NSColor(
+            calibratedRed: color.red,
+            green: color.green,
+            blue: color.blue,
+            alpha: color.alpha
+        )
     }
 }

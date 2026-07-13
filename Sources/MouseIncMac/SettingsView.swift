@@ -37,11 +37,7 @@ struct SettingsView: View {
         Section("手势") {
             Toggle("启用鼠标与触控板手势", isOn: $model.draft.gestureOptions.enabled)
             Toggle("显示轨迹", isOn: $model.draft.gestureOptions.showsTrail)
-            Picker("轨迹颜色", selection: $model.draft.gestureOptions.trailColor) {
-                ForEach(GestureTrailColor.allCases, id: \.self) { color in
-                    Text(trailColorName(color)).tag(color)
-                }
-            }
+            ColorPicker("轨迹颜色", selection: trailColorBinding, supportsOpacity: true)
             Toggle("报告识别失败", isOn: $model.draft.gestureOptions.reportsFailures)
             numberField("启动距离", value: $model.draft.gestureOptions.startDistance)
             numberField("简化容差", value: $model.draft.gestureOptions.simplificationTolerance)
@@ -64,14 +60,22 @@ struct SettingsView: View {
         }
     }
 
-    private func trailColorName(_ color: GestureTrailColor) -> String {
-        switch color {
-        case .orange: return "橙色"
-        case .blue: return "蓝色"
-        case .green: return "绿色"
-        case .pink: return "粉色"
-        case .purple: return "紫色"
-        }
+    private var trailColorBinding: Binding<Color> {
+        Binding(
+            get: {
+                let color = model.draft.gestureOptions.trailColor
+                return Color(red: color.red, green: color.green, blue: color.blue, opacity: color.alpha)
+            },
+            set: { color in
+                guard let sRGB = NSColor(color).usingColorSpace(.sRGB) else { return }
+                model.draft.gestureOptions.trailColor = GestureTrailColor(
+                    red: sRGB.redComponent,
+                    green: sRGB.greenComponent,
+                    blue: sRGB.blueComponent,
+                    alpha: sRGB.alphaComponent
+                )
+            }
+        )
     }
 
     private var edgeScrollSection: some View {

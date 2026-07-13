@@ -39,7 +39,7 @@ final class AppConfigurationTests: XCTestCase {
             maximumDuration: 2.5,
             showsTrail: false,
             reportsFailures: false,
-            trailColor: .purple
+            trailColor: GestureTrailColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 0.7)
         )
         let configuration = AppConfiguration(gestureOptions: options, bindings: [.sampleGlobal])
 
@@ -110,6 +110,18 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertFalse(current.showsTrail)
         XCTAssertTrue(current.reportsFailures)
         XCTAssertEqual(current.bindings, GestureBinding.defaults)
+    }
+
+    func testLegacyNamedTrailColorMigratesToRGBA() throws {
+        let configuration = try JSONDecoder().decode(
+            AppConfiguration.self,
+            from: Data(#"{"schemaVersion":4,"gestureOptions":{"trailColor":"purple"}}"#.utf8)
+        )
+
+        XCTAssertEqual(
+            configuration.gestureOptions.trailColor,
+            GestureTrailColor(red: 0.69, green: 0.32, blue: 0.87)
+        )
     }
 
     func testSchemaTwoMigratesWithDefaultActionSequenceOptions() throws {

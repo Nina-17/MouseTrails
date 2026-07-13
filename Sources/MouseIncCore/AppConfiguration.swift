@@ -303,12 +303,48 @@ public struct GestureOptions: Codable, Equatable, Sendable {
     }
 }
 
-public enum GestureTrailColor: String, Codable, CaseIterable, Sendable {
-    case orange
-    case blue
-    case green
-    case pink
-    case purple
+public struct GestureTrailColor: Codable, Equatable, Sendable {
+    public var red: Double
+    public var green: Double
+    public var blue: Double
+    public var alpha: Double
+
+    public init(red: Double, green: Double, blue: Double, alpha: Double = 1) {
+        self.red = min(max(red, 0), 1)
+        self.green = min(max(green, 0), 1)
+        self.blue = min(max(blue, 0), 1)
+        self.alpha = min(max(alpha, 0), 1)
+    }
+
+    public static let orange = GestureTrailColor(red: 1, green: 0.58, blue: 0)
+
+    private enum CodingKeys: String, CodingKey {
+        case red
+        case green
+        case blue
+        case alpha
+    }
+
+    public init(from decoder: Decoder) throws {
+        if let legacyName = try? decoder.singleValueContainer().decode(String.self) {
+            switch legacyName {
+            case "blue": self = GestureTrailColor(red: 0, green: 0.48, blue: 1)
+            case "green": self = GestureTrailColor(red: 0.20, green: 0.78, blue: 0.35)
+            case "pink": self = GestureTrailColor(red: 1, green: 0.18, blue: 0.54)
+            case "purple": self = GestureTrailColor(red: 0.69, green: 0.32, blue: 0.87)
+            default: self = .orange
+            }
+            return
+        }
+
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            red: try container.decode(Double.self, forKey: .red),
+            green: try container.decode(Double.self, forKey: .green),
+            blue: try container.decode(Double.self, forKey: .blue),
+            alpha: try container.decodeIfPresent(Double.self, forKey: .alpha) ?? 1
+        )
+    }
 }
 
 public struct GestureBinding: Codable, Equatable, Sendable {
