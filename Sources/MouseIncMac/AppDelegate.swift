@@ -134,6 +134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ","
         )
         settingsItem.target = self
+        settingsItem.image = NSImage(
+            systemSymbolName: "gearshape",
+            accessibilityDescription: "打开设置"
+        )
         menu.addItem(settingsItem)
 
         statusItem.menu = menu
