@@ -14,7 +14,7 @@ public struct GestureRecognizer: Sendable {
             return nil
         }
 
-        if let template = GestureTemplateRecognizer().recognize(points),
+        if let template = GestureTemplateRecognizer(minimumScore: 0.70).recognize(points),
            template.identifier == "LETTER_S" || template.identifier == "LETTER_W" {
             return template.identifier
         }
@@ -39,7 +39,7 @@ public struct GestureRecognizer: Sendable {
 
         guard !directions.isEmpty else { return nil }
         if directions.count >= 3,
-           let template = GestureTemplateRecognizer().recognize(points) {
+           let template = GestureTemplateRecognizer(minimumScore: 0.70).recognize(points) {
             return template.identifier
         }
         return directions.map(\.rawValue).joined(separator: "-")

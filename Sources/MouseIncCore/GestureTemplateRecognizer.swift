@@ -135,22 +135,15 @@ public struct GestureTemplateRecognizer: Sendable {
 
 public extension GestureTemplate {
     static let builtIns: [GestureTemplate] = [
-        GestureTemplate(identifier: "LETTER_S", points: polyline([
-            CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 0.5),
-            CGPoint(x: 1, y: 0.5), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0)
+        GestureTemplate(identifier: "LETTER_S", points: bezier([
+            (CGPoint(x: 1, y: 1), CGPoint(x: 0.18, y: 1.10), CGPoint(x: 0.00, y: 0.78), CGPoint(x: 0.52, y: 0.53)),
+            (CGPoint(x: 0.52, y: 0.53), CGPoint(x: 1.00, y: 0.32), CGPoint(x: 0.82, y: -0.08), CGPoint(x: 0.00, y: 0.00))
         ])),
         GestureTemplate(identifier: "LETTER_W", points: polyline([
             CGPoint(x: 0, y: 1), CGPoint(x: 0.25, y: 0), CGPoint(x: 0.5, y: 0.62),
             CGPoint(x: 0.75, y: 0), CGPoint(x: 1, y: 1)
         ]))
     ]
-
-    private static func arcPoints(from start: Double, to end: Double) -> [CGPoint] {
-        (0...64).map { index in
-            let angle = start + Double(index) / 64 * (end - start)
-            return CGPoint(x: cos(angle), y: sin(angle))
-        }
-    }
 
     private static func polyline(_ vertices: [CGPoint]) -> [CGPoint] {
         zip(vertices, vertices.dropFirst()).flatMap { start, end in
@@ -162,5 +155,22 @@ public extension GestureTemplate {
                 )
             }
         } + [vertices.last!]
+    }
+
+    private static func bezier(
+        _ segments: [(CGPoint, CGPoint, CGPoint, CGPoint)],
+        samplesPerSegment: Int = 24
+    ) -> [CGPoint] {
+        segments.enumerated().flatMap { segmentIndex, segment in
+            let (p0, p1, p2, p3) = segment
+            return (0..<samplesPerSegment).map { index in
+                let t = Double(index) / Double(samplesPerSegment)
+                let u = 1 - t
+                return CGPoint(
+                    x: u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x,
+                    y: u * u * u * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t * t * t * p3.y
+                )
+            } + (segmentIndex == segments.count - 1 ? [p3] : [])
+        }
     }
 }

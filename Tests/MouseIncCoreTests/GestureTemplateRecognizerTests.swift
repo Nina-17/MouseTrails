@@ -36,4 +36,15 @@ final class GestureTemplateRecognizerTests: XCTestCase {
             "LETTER_S"
         )
     }
+
+    func testMainRecognizerReturnsTemplateIdentifierForLetterW() {
+        let points = GestureTemplate.builtIns.first { $0.identifier == "LETTER_W" }!.points.map {
+            CGPoint(x: $0.x * 140 + 20, y: $0.y * 120 + 40)
+        }
+
+        XCTAssertEqual(
+            GestureRecognizer(simplificationTolerance: 8, minimumGestureLength: 40).recognize(points),
+            "LETTER_W"
+        )
+    }
 }
