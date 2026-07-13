@@ -19,9 +19,7 @@ final class SettingsViewModel: ObservableObject {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
     ) {
-        var normalizedConfiguration = configuration
-        Self.replaceDefaultBindingNames(in: &normalizedConfiguration)
-        draft = normalizedConfiguration
+        draft = configuration
         bindingIDs = configuration.bindings.map { _ in UUID() }
         self.saveHandler = saveHandler
         self.exportHandler = exportHandler
@@ -38,9 +36,7 @@ final class SettingsViewModel: ObservableObject {
 
     func reload(_ configuration: AppConfiguration) {
         bindingIDs = configuration.bindings.map { _ in UUID() }
-        var normalizedConfiguration = configuration
-        Self.replaceDefaultBindingNames(in: &normalizedConfiguration)
-        draft = normalizedConfiguration
+        draft = configuration
         saveMessage = nil
     }
 
@@ -50,7 +46,7 @@ final class SettingsViewModel: ObservableObject {
         draft.bindings.append(
             GestureBinding(
                 gesture: "UP_RIGHT",
-                name: Self.actionName(action),
+                name: "新手势",
                 actions: [action]
             )
         )
@@ -103,7 +99,6 @@ final class SettingsViewModel: ObservableObject {
         guard draft.bindings.indices.contains(bindingIndex) else { return }
         let action = ActionDefinition(type: .keyStroke, value: "Command+C")
         draft.bindings[bindingIndex].actions.append(action)
-        updateDefaultNameIfNeeded(at: bindingIndex)
     }
 
     func setActionType(
@@ -117,6 +112,19 @@ final class SettingsViewModel: ObservableObject {
             draft.bindings[bindingIndex].actions.indices.contains(actionIndex)
         else { return }
         draft.bindings[bindingIndex].actions[actionIndex] = ActionDefinition(type: kind, value: value)
+        updateDefaultNameIfNeeded(at: bindingIndex)
+    }
+
+    func setActionValue(
+        _ value: String,
+        actionIndex: Int,
+        bindingIndex: Int
+    ) {
+        guard
+            draft.bindings.indices.contains(bindingIndex),
+            draft.bindings[bindingIndex].actions.indices.contains(actionIndex)
+        else { return }
+        draft.bindings[bindingIndex].actions[actionIndex].value = value
         updateDefaultNameIfNeeded(at: bindingIndex)
     }
 
@@ -170,14 +178,6 @@ final class SettingsViewModel: ObservableObject {
             let action = draft.bindings[bindingIndex].actions.first
         else { return }
         draft.bindings[bindingIndex].name = Self.actionName(action)
-    }
-
-    private static func replaceDefaultBindingNames(in configuration: inout AppConfiguration) {
-        for index in configuration.bindings.indices
-        where configuration.bindings[index].name == "新手势" {
-            guard let action = configuration.bindings[index].actions.first else { continue }
-            configuration.bindings[index].name = actionName(action)
-        }
     }
 
     private static func actionName(_ action: ActionDefinition) -> String {

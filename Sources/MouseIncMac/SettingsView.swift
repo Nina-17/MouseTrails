@@ -608,7 +608,11 @@ struct SettingsView: View {
                     model.draft.bindings.indices.contains(binding),
                     model.draft.bindings[binding].actions.indices.contains(action)
                 else { return }
-                model.draft.bindings[binding].actions[action].value = value
+                model.setActionValue(
+                    value,
+                    actionIndex: action,
+                    bindingIndex: binding
+                )
             }
         )
     }

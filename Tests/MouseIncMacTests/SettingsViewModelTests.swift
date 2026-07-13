@@ -11,11 +11,11 @@ final class SettingsViewModelTests: XCTestCase {
 
         let binding = model.draft.bindings.last
         XCTAssertEqual(binding?.gesture, "UP_RIGHT")
-        XCTAssertEqual(binding?.name, "居中窗口")
+        XCTAssertEqual(binding?.name, "新手势")
         XCTAssertEqual(binding?.actions, [.init(type: .windowAction, value: "center")])
     }
 
-    func testExistingDefaultNameUsesFirstActionNameButCustomNameIsPreserved() {
+    func testExistingDefaultNameAndCustomNameArePreserved() {
         var configuration = AppConfiguration(bindings: [
             GestureBinding(
                 gesture: "LEFT",
@@ -32,23 +32,42 @@ final class SettingsViewModelTests: XCTestCase {
 
         let model = SettingsViewModel(configuration: configuration) { _ in }
 
-        XCTAssertEqual(model.draft.bindings[0].name, "生成贴图")
+        XCTAssertEqual(model.draft.bindings[0].name, "新手势")
         XCTAssertEqual(model.draft.bindings[1].name, "我的操作")
     }
 
-    func testAddingFirstActionReplacesDefaultName() {
+    func testChangingActionReplacesDefaultName() {
         var configuration = AppConfiguration(bindings: [
             GestureBinding(
                 gesture: "UP",
                 name: "新手势",
-                actions: []
+                actions: [.init(type: .windowAction, value: WindowAction.center.rawValue)]
             )
         ])
         configuration.enabled = true
         let model = SettingsViewModel(configuration: configuration) { _ in }
-        model.addAction(to: 0)
+        model.setActionType(
+            .captureAction,
+            value: CaptureAction.pinRegion.rawValue,
+            actionIndex: 0,
+            bindingIndex: 0
+        )
 
-        XCTAssertEqual(model.draft.bindings[0].name, "快捷键 Command+C")
+        XCTAssertEqual(model.draft.bindings[0].name, "生成贴图")
+    }
+
+    func testChangingActionValueReplacesDefaultName() {
+        let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "新手势",
+                actions: [.init(type: .keyStroke, value: "Command+C")]
+            )
+        ])) { _ in }
+
+        model.setActionValue("Command+V", actionIndex: 0, bindingIndex: 0)
+
+        XCTAssertEqual(model.draft.bindings[0].name, "快捷键 Command+V")
     }
 
     func testInvalidDraftDoesNotSave() {
