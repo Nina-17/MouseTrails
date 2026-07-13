@@ -63,10 +63,10 @@ struct SettingsView: View {
             Form { edgeScrollSection }
                 .formStyle(.grouped)
         case .permissions:
-            Form {
-                permissionSection
-                pinnedImageHelpSection
-            }
+            Form { permissionSection }
+                .formStyle(.grouped)
+        case .pinnedImage:
+            Form { pinnedImageHelpSection }
             .formStyle(.grouped)
         case .data:
             Form {
@@ -677,6 +677,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
     case bindings
     case edgeScroll
     case permissions
+    case pinnedImage
     case data
 
     var id: Self { self }
@@ -686,7 +687,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return "通用"
         case .bindings: return "手势绑定"
         case .edgeScroll: return "边缘滚轮"
-        case .permissions: return "权限与贴图"
+        case .permissions: return "权限"
+        case .pinnedImage: return "贴图"
         case .data: return "数据与检查"
         }
     }
@@ -696,7 +698,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return "手势识别、轨迹外观和动作序列"
         case .bindings: return "管理轨迹、应用范围和执行动作"
         case .edgeScroll: return "左侧亮度与右侧音量控制"
-        case .permissions: return "系统授权状态和贴图使用说明"
+        case .permissions: return "查看辅助功能、屏幕录制和输入监控状态"
+        case .pinnedImage: return "查看贴图的移动、折叠、透明度和复制操作"
         case .data: return "导出、恢复并检查配置"
         }
     }
@@ -707,6 +710,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .bindings: return "scribble.variable"
         case .edgeScroll: return "arrow.up.and.down.and.arrow.left.and.right"
         case .permissions: return "lock.shield"
+        case .pinnedImage: return "pin"
         case .data: return "externaldrive"
         }
     }
