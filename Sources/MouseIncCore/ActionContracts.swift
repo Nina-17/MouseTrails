@@ -157,7 +157,7 @@ public enum ActionCatalog {
             ActionDescriptor(
                 kind: .ocrAction,
                 displayName: "离线 OCR",
-                valueDescription: "识别手势范围内的文字",
+                valueDescription: "识别、复制并发送摘要通知",
                 requiredPermissions: [.screenRecording]
             )
         }

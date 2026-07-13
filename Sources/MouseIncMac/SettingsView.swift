@@ -428,7 +428,7 @@ struct SettingsView: View {
 
     private func ocrActionName(_ action: OCRAction) -> String {
         switch action {
-        case .recognizeRegion: return "识别手势范围内的文字"
+        case .recognizeRegion: return "识别、复制并通知"
         }
     }
 }

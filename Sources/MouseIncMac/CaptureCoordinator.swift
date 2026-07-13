@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class CaptureCoordinator: NSObject {
     private var pinnedWindows: [PinnedImageWindowController] = []
-    private var ocrResultWindows: [OCRResultWindowController] = []
+    private let notificationCoordinator = UserNotificationCoordinator()
 
     func perform(_ action: CaptureAction, gestureBounds: CGRect?) -> Bool {
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
@@ -82,8 +82,17 @@ final class CaptureCoordinator: NSObject {
         do {
             let image = try await captureImage(in: rect)
             let text = try await OCRTextRecognizer.recognize(image)
-            createOCRResultWindow(text: text)
-            DiagnosticLogger.shared.log("OCR completed; hasText=\(!text.isEmpty)")
+            if text.isEmpty {
+                notificationCoordinator.postOCRResult(text: "")
+            } else {
+                let pasteboard = NSPasteboard.general
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+                notificationCoordinator.postOCRResult(text: text)
+            }
+            DiagnosticLogger.shared.log(
+                "OCR completed; hasText=\(!text.isEmpty); copied=\(!text.isEmpty)"
+            )
         } catch {
             DiagnosticLogger.shared.log("OCR failed: \(error.localizedDescription)")
             presentError(title: "文字识别失败", message: error.localizedDescription)
@@ -194,16 +203,6 @@ final class CaptureCoordinator: NSObject {
             self.pinnedWindows.removeAll { $0 === controller }
         }
         pinnedWindows.append(controller)
-        controller.show()
-    }
-
-    private func createOCRResultWindow(text: String) {
-        let controller = OCRResultWindowController(text: text)
-        controller.onClose = { [weak self, weak controller] in
-            guard let self, let controller else { return }
-            self.ocrResultWindows.removeAll { $0 === controller }
-        }
-        ocrResultWindows.append(controller)
         controller.show()
     }
 
@@ -476,104 +475,5 @@ private final class PinnedImageView: NSImageView {
         imageAlignment = .alignCenter
         window.setFrame(compactFrame, display: true, animate: true)
         isCompact = true
-    }
-}
-
-@MainActor
-private final class OCRResultWindowController: NSWindowController, NSWindowDelegate {
-    var onClose: (() -> Void)?
-    private let recognizedText: String
-
-    init(text: String) {
-        recognizedText = text
-
-        let displayText = text.isEmpty ? "未识别到文字" : text
-        let textView = NSTextView()
-        textView.string = displayText
-        textView.isEditable = false
-        textView.isSelectable = !text.isEmpty
-        textView.font = .systemFont(ofSize: 15)
-        textView.textContainerInset = CGSize(width: 10, height: 10)
-        textView.backgroundColor = .textBackgroundColor
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = CGSize(
-            width: 528,
-            height: CGFloat.greatestFiniteMagnitude
-        )
-        textView.frame = CGRect(x: 0, y: 0, width: 528, height: 310)
-
-        let scrollView = NSScrollView()
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
-
-        let copyButton = NSButton(title: "复制结果", target: nil, action: nil)
-        copyButton.isEnabled = !text.isEmpty
-        let closeButton = NSButton(title: "关闭", target: nil, action: nil)
-
-        let buttonRow = NSStackView(views: [copyButton, closeButton])
-        buttonRow.orientation = .horizontal
-        buttonRow.alignment = .centerY
-        buttonRow.spacing = 10
-
-        let contentView = NSView()
-        contentView.addSubview(scrollView)
-        contentView.addSubview(buttonRow)
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        buttonRow.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 16),
-            scrollView.bottomAnchor.constraint(equalTo: buttonRow.topAnchor, constant: -12),
-            buttonRow.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
-            buttonRow.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -16)
-        ])
-
-        let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 560, height: 380),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "OCR 识别结果"
-        window.contentView = contentView
-        window.isReleasedWhenClosed = false
-        window.center()
-
-        super.init(window: window)
-        window.delegate = self
-        copyButton.target = self
-        copyButton.action = #selector(copyResult)
-        closeButton.target = self
-        closeButton.action = #selector(closeResult)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        onClose?()
-    }
-
-    @objc private func copyResult() {
-        guard !recognizedText.isEmpty else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(recognizedText, forType: .string)
-    }
-
-    @objc private func closeResult() {
-        window?.close()
     }
 }

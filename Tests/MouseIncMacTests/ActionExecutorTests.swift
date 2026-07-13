@@ -4,6 +4,17 @@ import XCTest
 
 @MainActor
 final class ActionExecutorTests: XCTestCase {
+    func testOCRNotificationPreviewNormalizesAndTruncatesText() {
+        XCTAssertEqual(
+            UserNotificationCoordinator.previewText("第一行\n  第二行", limit: 20),
+            "第一行 第二行"
+        )
+        XCTAssertEqual(
+            UserNotificationCoordinator.previewText("123456789", limit: 5),
+            "12345…"
+        )
+    }
+
     func testDelaySequenceCompletes() async throws {
         let executor = makeExecutor()
 
