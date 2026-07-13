@@ -374,6 +374,10 @@ struct SettingsView: View {
 
             GroupBox("执行动作") {
               VStack(alignment: .leading, spacing: 10) {
+                if binding.actions.isEmpty {
+                    Label("无动作", systemImage: "minus.circle")
+                        .foregroundStyle(.secondary)
+                }
                 ForEach(binding.actions.indices, id: \.self) { actionIndex in
                   HStack(alignment: .center, spacing: 10) {
                     Text("\(actionIndex + 1)")
@@ -732,7 +736,10 @@ struct SettingsView: View {
     }
 
     private func displayName(for identifier: String) -> String {
-        (cardinalGestureChoices + templateGestureChoices + polylineGestureChoices)
+        guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "无"
+        }
+        return (cardinalGestureChoices + templateGestureChoices + polylineGestureChoices)
             .first { $0.0 == identifier }?.1 ?? identifier
     }
 

@@ -60,6 +60,9 @@ struct GesturePreview: View {
     }
 
     private var previewPoints: [CGPoint] {
+        guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
         switch identifier.uppercased() {
         case "SQUARE_COUNTERCLOCKWISE":
             return [
@@ -97,7 +100,7 @@ struct GesturePreview: View {
             let last = result.last ?? .zero
             result.append(CGPoint(x: last.x + delta.x, y: last.y + delta.y))
         }
-        return result.count > 1 ? result : [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0)]
+        return result.count > 1 ? result : []
     }
 
     private func mapped(_ point: CGPoint, in size: CGSize, points: [CGPoint]) -> CGPoint {

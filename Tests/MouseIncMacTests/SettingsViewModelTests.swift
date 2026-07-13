@@ -4,15 +4,15 @@ import XCTest
 
 @MainActor
 final class SettingsViewModelTests: XCTestCase {
-    func testAddsWindowCenterBinding() {
+    func testAddsEmptyBinding() {
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
 
         model.addBinding()
 
         let binding = model.draft.bindings.last
-        XCTAssertEqual(binding?.gesture, "UP_RIGHT")
+        XCTAssertEqual(binding?.gesture, "")
         XCTAssertEqual(binding?.name, "新手势")
-        XCTAssertEqual(binding?.actions, [.init(type: .windowAction, value: "center")])
+        XCTAssertEqual(binding?.actions, [])
     }
 
     func testExistingDefaultNameAndCustomNameArePreserved() {

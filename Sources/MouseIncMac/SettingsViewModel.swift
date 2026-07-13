@@ -41,13 +41,12 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func addBinding() {
-        let action = ActionDefinition(type: .windowAction, value: WindowAction.center.rawValue)
         bindingIDs.append(UUID())
         draft.bindings.append(
             GestureBinding(
-                gesture: "UP_RIGHT",
+                gesture: "",
                 name: "新手势",
-                actions: [action]
+                actions: []
             )
         )
     }
