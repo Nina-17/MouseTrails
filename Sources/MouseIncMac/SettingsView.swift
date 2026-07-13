@@ -198,9 +198,11 @@ struct SettingsView: View {
             }
 
             Picker("当前绑定", selection: $selectedBindingID) {
-                ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
-                    Text(model.binding(at: index)?.name ?? "未命名手势")
-                        .tag(Optional(id))
+                ForEach(model.orderedBindingIDs, id: \.self) { id in
+                    if let index = model.bindingIndex(for: id) {
+                        Text(model.binding(at: index)?.name ?? "未命名手势")
+                            .tag(Optional(id))
+                    }
                 }
             }
             .labelsHidden()
@@ -226,9 +228,11 @@ struct SettingsView: View {
     private var bindingListPane: some View {
         VStack(spacing: 0) {
             List(selection: $selectedBindingID) {
-                ForEach(Array(model.bindingIDs.enumerated()), id: \.element) { index, id in
-                    bindingListRow(at: index)
-                        .tag(id)
+                ForEach(model.orderedBindingIDs, id: \.self) { id in
+                    if let index = model.bindingIndex(for: id) {
+                        bindingListRow(at: index)
+                            .tag(id)
+                    }
                 }
             }
             .listStyle(.sidebar)
@@ -319,16 +323,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { model.moveBinding(from: index, by: -1) } label: {
-                    Image(systemName: "arrow.up")
-                }
-                .help("上移")
-                .disabled(index == 0)
-                Button { model.moveBinding(from: index, by: 1) } label: {
-                    Image(systemName: "arrow.down")
-                }
-                .help("下移")
-                .disabled(index == model.draft.bindings.count - 1)
                 Button(role: .destructive) { removeBinding(at: index) } label: {
                     Image(systemName: "trash")
                 }
@@ -542,7 +536,7 @@ struct SettingsView: View {
         if let selectedBindingID, model.bindingIDs.contains(selectedBindingID) {
             return
         }
-        selectedBindingID = model.bindingIDs.first
+        selectedBindingID = model.orderedBindingIDs.first
     }
 
     private func removeBinding(at index: Int) {

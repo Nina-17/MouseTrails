@@ -97,32 +97,33 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.saveMessage, "已保存并生效")
     }
 
-    func testMovesBindingAndReportsScopedIssues() {
+    func testReportsScopedIssuesWithoutChangingBindingOrder() {
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
         let originalSecondGesture = model.draft.bindings[1].gesture
 
-        model.moveBinding(from: 1, by: -1)
-        model.draft.bindings[0].gesture = ""
+        model.draft.bindings[1].gesture = ""
 
-        XCTAssertEqual(model.draft.bindings[0].gesture, "")
+        XCTAssertEqual(model.draft.bindings[1].gesture, "")
         XCTAssertEqual(originalSecondGesture, "DOWN")
-        XCTAssertTrue(model.issues(for: 0).contains { $0.code == .emptyGesture })
-        XCTAssertTrue(model.issues(for: 1).isEmpty)
+        XCTAssertTrue(model.issues(for: 1).contains { $0.code == .emptyGesture })
+        XCTAssertTrue(model.issues(for: 0).isEmpty)
     }
 
-    func testBindingIdentitiesStayAlignedAfterRemovalAndMove() {
-        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
-        let firstID = model.bindingIDs[0]
-        let secondID = model.bindingIDs[1]
+    func testOrdersBindingsByGestureCategoryWithoutChangingConfigurationOrder() {
+        let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
+            GestureBinding(gesture: "LETTER_W", name: "模板", actions: [.init(type: .keyStroke, value: "Command+C")]),
+            GestureBinding(gesture: "DOWN-RIGHT", name: "折线", actions: [.init(type: .keyStroke, value: "Command+C")]),
+            GestureBinding(gesture: "UP_RIGHT", name: "对角线", actions: [.init(type: .keyStroke, value: "Command+C")]),
+            GestureBinding(gesture: "UP", name: "直线", actions: [.init(type: .keyStroke, value: "Command+C")]),
+            GestureBinding(gesture: "", name: "未配置", actions: [])
+        ])) { _ in }
 
-        model.removeBinding(at: 0)
-        XCTAssertEqual(model.bindingIDs.first, secondID)
-        XCTAssertEqual(model.bindingIDs.count, model.draft.bindings.count)
+        let orderedGestures = model.orderedBindingIDs.compactMap { id in
+            model.bindingIndex(for: id).flatMap { model.binding(at: $0)?.gesture }
+        }
 
-        model.moveBinding(from: 0, by: 1)
-        XCTAssertNotEqual(model.bindingIDs.first, secondID)
-        XCTAssertFalse(model.bindingIDs.contains(firstID))
-        XCTAssertEqual(model.bindingIDs.count, model.draft.bindings.count)
+        XCTAssertEqual(orderedGestures, ["UP", "UP_RIGHT", "DOWN-RIGHT", "LETTER_W", ""])
+        XCTAssertEqual(model.draft.bindings.map(\.gesture), ["LETTER_W", "DOWN-RIGHT", "UP_RIGHT", "UP", ""])
     }
 
     func testGestureCanBeSelectedForNewBinding() {

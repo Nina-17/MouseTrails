@@ -34,6 +34,19 @@ final class SettingsViewModel: ObservableObject {
         validation.isValid
     }
 
+    var orderedBindingIDs: [UUID] {
+        bindingIDs.enumerated()
+            .sorted { lhs, rhs in
+                let lhsKey = Self.gestureSortKey(for: draft.bindings[lhs.offset].gesture)
+                let rhsKey = Self.gestureSortKey(for: draft.bindings[rhs.offset].gesture)
+                if lhsKey.category != rhsKey.category { return lhsKey.category < rhsKey.category }
+                if lhsKey.order != rhsKey.order { return lhsKey.order < rhsKey.order }
+                if lhsKey.name != rhsKey.name { return lhsKey.name < rhsKey.name }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
     func reload(_ configuration: AppConfiguration) {
         bindingIDs = configuration.bindings.map { _ in UUID() }
         draft = configuration
@@ -60,19 +73,13 @@ final class SettingsViewModel: ObservableObject {
         draft.bindings.remove(at: index)
     }
 
-    func moveBinding(from index: Int, by offset: Int) {
-        let destination = index + offset
-        guard
-            draft.bindings.indices.contains(index),
-            draft.bindings.indices.contains(destination)
-        else { return }
-        bindingIDs.swapAt(index, destination)
-        draft.bindings.swapAt(index, destination)
-    }
-
     func binding(at index: Int) -> GestureBinding? {
         guard draft.bindings.indices.contains(index) else { return nil }
         return draft.bindings[index]
+    }
+
+    func bindingIndex(for id: UUID) -> Int? {
+        bindingIDs.firstIndex(of: id)
     }
 
     func setGesture(_ gesture: String, for bindingIndex: Int) {
@@ -177,6 +184,24 @@ final class SettingsViewModel: ObservableObject {
             let action = draft.bindings[bindingIndex].actions.first
         else { return }
         draft.bindings[bindingIndex].name = Self.actionName(action)
+    }
+
+    private static func gestureSortKey(for gesture: String) -> (category: Int, order: Int, name: String) {
+        let identifier = gesture.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !identifier.isEmpty else { return (5, 0, "") }
+
+        let categories: [[String]] = [
+            ["UP", "DOWN", "LEFT", "RIGHT"],
+            ["UP_LEFT", "UP_RIGHT", "DOWN_LEFT", "DOWN_RIGHT"],
+            ["UP-LEFT", "UP-RIGHT", "DOWN-LEFT", "DOWN-RIGHT", "LEFT-UP", "LEFT-DOWN", "RIGHT-UP", "RIGHT-DOWN"],
+            ["SQUARE_CLOCKWISE", "SQUARE_COUNTERCLOCKWISE", "LETTER_S", "LETTER_W"]
+        ]
+        for (category, identifiers) in categories.enumerated() {
+            if let order = identifiers.firstIndex(of: identifier) {
+                return (category, order, identifier)
+            }
+        }
+        return (4, 0, identifier)
     }
 
     private static func actionName(_ action: ActionDefinition) -> String {
