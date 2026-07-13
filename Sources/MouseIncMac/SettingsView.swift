@@ -716,9 +716,13 @@ struct SettingsView: View {
 
     private var polylineGestureChoices: [(String, String)] {
         [
+            ("UP-LEFT", "上 → 左"),
             ("DOWN-RIGHT", "下 → 右"),
             ("UP-RIGHT", "上 → 右"),
+            ("DOWN-LEFT", "下 → 左"),
+            ("LEFT-UP", "左 → 上"),
             ("LEFT-DOWN", "左 → 下"),
+            ("RIGHT-UP", "右 → 上"),
             ("RIGHT-DOWN", "右 → 下")
         ]
     }

@@ -54,6 +54,23 @@ final class GestureRecognizerTests: XCTestCase {
         )
     }
 
+    func testRecognizesAllRightAnglePolylineDirections() {
+        let samples: [(String, [CGPoint])] = [
+            ("UP-LEFT", [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 60), CGPoint(x: -60, y: 60)]),
+            ("UP-RIGHT", [CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 60), CGPoint(x: 60, y: 60)]),
+            ("DOWN-LEFT", [CGPoint(x: 0, y: 60), CGPoint(x: 0, y: 0), CGPoint(x: -60, y: 0)]),
+            ("DOWN-RIGHT", [CGPoint(x: 0, y: 60), CGPoint(x: 0, y: 0), CGPoint(x: 60, y: 0)]),
+            ("LEFT-UP", [CGPoint(x: 60, y: 0), CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 60)]),
+            ("LEFT-DOWN", [CGPoint(x: 60, y: 60), CGPoint(x: 0, y: 60), CGPoint(x: 0, y: 0)]),
+            ("RIGHT-UP", [CGPoint(x: 0, y: 0), CGPoint(x: 60, y: 0), CGPoint(x: 60, y: 60)]),
+            ("RIGHT-DOWN", [CGPoint(x: 0, y: 60), CGPoint(x: 60, y: 60), CGPoint(x: 60, y: 0)])
+        ]
+
+        for (identifier, points) in samples {
+            XCTAssertEqual(recognizer.recognize(points), identifier, identifier)
+        }
+    }
+
     func testDiagonalPolylineKeepsSegmentOrder() {
         let points = [
             CGPoint(x: 0, y: 0),
