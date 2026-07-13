@@ -15,11 +15,13 @@ final class GestureMonitor: NSObject {
     private let configurationProvider: () -> AppConfiguration
     private let overlay: GestureOverlay
     private let executor: ActionExecutor
+    private let edgeScrollController: EdgeScrollController
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var session = GestureSession()
     private var timeoutTask: Task<Void, Never>?
     private var didLogDrag = false
+    private var edgeCooldown = EdgeScrollCooldown()
 
     var onGesture: ((String) -> Void)?
 
@@ -31,11 +33,13 @@ final class GestureMonitor: NSObject {
     init(
         configuration: @escaping () -> AppConfiguration,
         overlay: GestureOverlay,
-        executor: ActionExecutor
+        executor: ActionExecutor,
+        edgeScrollController: EdgeScrollController = EdgeScrollController()
     ) {
         configurationProvider = configuration
         self.overlay = overlay
         self.executor = executor
+        self.edgeScrollController = edgeScrollController
         super.init()
     }
 
@@ -57,7 +61,7 @@ final class GestureMonitor: NSObject {
             "postEvent=\(AccessibilityPermission.isPostEventGranted)"
         )
 
-        let eventTypes: [CGEventType] = [.rightMouseDown, .rightMouseDragged, .rightMouseUp]
+        let eventTypes: [CGEventType] = [.rightMouseDown, .rightMouseDragged, .rightMouseUp, .scrollWheel]
         let mask = eventTypes.reduce(CGEventMask(0)) { partial, eventType in
             partial | (CGEventMask(1) << CGEventMask(eventType.rawValue))
         }
@@ -123,6 +127,9 @@ final class GestureMonitor: NSObject {
         let now = ProcessInfo.processInfo.systemUptime
 
         switch type {
+        case .scrollWheel:
+            handleEdgeScroll(event: event, configuration: configuration, now: now)
+            return Unmanaged.passUnretained(event)
         case .rightMouseDown:
             guard options.enabled else {
                 clearSession()
@@ -239,6 +246,21 @@ final class GestureMonitor: NSObject {
 
         default:
             return Unmanaged.passUnretained(event)
+        }
+    }
+
+    private func handleEdgeScroll(event: CGEvent, configuration: AppConfiguration, now: TimeInterval) {
+        let options = configuration.edgeScrollOptions
+        guard options.enabled, !session.isActive else { return }
+        let delta = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
+        guard delta != 0 else { return }
+        let detector = EdgeScrollDetector(inset: options.inset)
+        guard let edge = detector.edge(at: NSEvent.mouseLocation, in: NSScreen.screens.map(\.frame)),
+              edge == .left || edge == .right else { return }
+        edgeCooldown.interval = options.cooldown
+        guard edgeCooldown.shouldFire(edge: edge, now: now) else { return }
+        if edgeScrollController.adjust(edge, by: delta > 0 ? 1 : -1, step: options.step) {
+            onGesture?(edge == .left ? "边缘亮度" : "边缘音量")
         }
     }
 

@@ -11,7 +11,7 @@ final class ConfigStoreTests: XCTestCase {
 
         let configuration = try fixture.store.loadOrCreate()
 
-        XCTAssertEqual(configuration.schemaVersion, 3)
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
         XCTAssertTrue(configuration.validate().isValid)
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.fileURL.path))
     }
@@ -26,7 +26,7 @@ final class ConfigStoreTests: XCTestCase {
 
         let configuration = try fixture.store.loadOrCreate()
 
-        XCTAssertEqual(configuration.schemaVersion, 3)
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
         XCTAssertFalse(configuration.enabled)
         XCTAssertEqual(configuration.actionSequenceOptions, ActionSequenceOptions())
 
@@ -35,7 +35,7 @@ final class ConfigStoreTests: XCTestCase {
 
         let migratedData = try Data(contentsOf: fixture.fileURL)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: migratedData) as? [String: Any])
-        XCTAssertEqual(object["schemaVersion"] as? Int, 3)
+        XCTAssertEqual(object["schemaVersion"] as? Int, AppConfiguration.currentSchemaVersion)
         XCTAssertNotNil(object["actionSequenceOptions"])
     }
 

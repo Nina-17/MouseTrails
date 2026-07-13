@@ -8,6 +8,7 @@ public enum ConfigurationIssueSeverity: String, Codable, Sendable {
 public enum ConfigurationIssueCode: String, Codable, Sendable {
     case invalidGestureOption
     case invalidActionSequenceOption
+    case invalidEdgeScrollOption
     case emptyGesture
     case emptyBindingName
     case emptyActionSequence
@@ -52,6 +53,7 @@ public extension AppConfiguration {
         var issues: [ConfigurationIssue] = []
         validateGestureOptions(into: &issues)
         validateActionSequenceOptions(into: &issues)
+        validateEdgeScrollOptions(into: &issues)
         validateBindings(into: &issues)
         return ConfigurationValidationResult(issues: issues)
     }
@@ -86,6 +88,19 @@ public extension AppConfiguration {
                     message: "maximumDelay 必须位于 0...3600 之间"
                 )
             )
+        }
+    }
+
+    private func validateEdgeScrollOptions(into issues: inout [ConfigurationIssue]) {
+        let values: [(String, Double, ClosedRange<Double>)] = [
+            ("inset", edgeScrollOptions.inset, 0 ... 20),
+            ("step", edgeScrollOptions.step, 0.01 ... 0.25),
+            ("cooldown", edgeScrollOptions.cooldown, 0 ... 2)
+        ]
+        for (name, value, range) in values where !value.isFinite || !range.contains(value) {
+            issues.append(.init(severity: .error, code: .invalidEdgeScrollOption,
+                                path: "edgeScrollOptions.\(name)",
+                                message: "\(name) 必须位于 \(range.lowerBound)...\(range.upperBound) 之间"))
         }
     }
 

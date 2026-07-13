@@ -123,7 +123,7 @@ final class AppConfigurationTests: XCTestCase {
 
         let encoded = try JSONEncoder().encode(configuration)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-        XCTAssertEqual(object["schemaVersion"] as? Int, 3)
+        XCTAssertEqual(object["schemaVersion"] as? Int, AppConfiguration.currentSchemaVersion)
         XCTAssertNotNil(object["actionSequenceOptions"])
     }
 

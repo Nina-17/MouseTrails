@@ -1,5 +1,19 @@
 import Foundation
 
+public struct EdgeScrollOptions: Codable, Equatable, Sendable {
+    public var enabled: Bool
+    public var inset: Double
+    public var step: Double
+    public var cooldown: TimeInterval
+
+    public init(enabled: Bool = false, inset: Double = 2, step: Double = 0.05, cooldown: TimeInterval = 0.08) {
+        self.enabled = enabled
+        self.inset = inset
+        self.step = step
+        self.cooldown = cooldown
+    }
+}
+
 public enum ScreenEdge: String, Codable, CaseIterable, Sendable {
     case top
     case bottom

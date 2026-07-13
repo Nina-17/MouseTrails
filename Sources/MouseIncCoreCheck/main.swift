@@ -94,8 +94,8 @@ private func runChecks() throws {
 private func runActionContractChecks() throws {
     try check(
         "schema version",
-        AppConfiguration.currentSchemaVersion == 3,
-        "P2 shared configuration must encode schema 3"
+        AppConfiguration.currentSchemaVersion == 4,
+        "Edge scroll configuration must encode schema 4"
     )
     try check(
         "default validation",
@@ -133,7 +133,7 @@ private func runActionContractChecks() throws {
     let migrated = try JSONDecoder().decode(AppConfiguration.self, from: schemaTwoData)
     try check(
         "schema 2 migration",
-        migrated.schemaVersion == 3 && migrated.actionSequenceOptions == ActionSequenceOptions(),
+        migrated.schemaVersion == AppConfiguration.currentSchemaVersion && migrated.actionSequenceOptions == ActionSequenceOptions(),
         "schema 2 did not migrate with safe action defaults"
     )
 

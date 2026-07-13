@@ -10,6 +10,7 @@ struct SettingsView: View {
             Form {
                 gestureSection
                 sequenceSection
+                edgeScrollSection
                 bindingsSection
                 permissionSection
                 pinnedImageHelpSection
@@ -20,7 +21,7 @@ struct SettingsView: View {
 
             Divider()
             HStack {
-                Text(model.saveMessage ?? "Schema 3 配置")
+                Text(model.saveMessage ?? "Schema \(AppConfiguration.currentSchemaVersion) 配置")
                     .foregroundStyle(model.canSave ? Color.secondary : Color.red)
                 Spacer()
                 Button("保存") { model.save() }
@@ -55,6 +56,18 @@ struct SettingsView: View {
                 Text("继续执行").tag(ActionSequenceOptions.FailurePolicy.continueSequence)
             }
             numberField("最大延时（秒）", value: $model.draft.actionSequenceOptions.maximumDelay)
+        }
+    }
+
+    private var edgeScrollSection: some View {
+        Section("边缘滚轮（简化版）") {
+            Toggle("启用左亮度、右音量", isOn: $model.draft.edgeScrollOptions.enabled)
+            numberField("边缘宽度（点）", value: $model.draft.edgeScrollOptions.inset)
+            numberField("每次调节比例", value: $model.draft.edgeScrollOptions.step)
+            numberField("冷却时间（秒）", value: $model.draft.edgeScrollOptions.cooldown)
+            Text("左边缘滚动调亮度，右边缘滚动调系统输出音量；上、下边缘不处理。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
