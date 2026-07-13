@@ -25,6 +25,20 @@ struct GesturePreview: View {
     }
 
     private var previewPoints: [CGPoint] {
+        switch identifier.uppercased() {
+        case "SQUARE_COUNTERCLOCKWISE":
+            return [
+                CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0),
+                CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 0)
+            ]
+        case "SQUARE_CLOCKWISE":
+            return [
+                CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1),
+                CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0)
+            ]
+        default:
+            break
+        }
         if let template = GestureTemplate.builtIns.first(where: {
             $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame
         }) {
