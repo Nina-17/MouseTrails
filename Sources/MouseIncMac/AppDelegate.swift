@@ -12,7 +12,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
     private var settingsWindowController: SettingsWindowController?
-    private var usesDockFallback = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let permissions = PermissionCoordinator.snapshot
@@ -27,7 +26,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadConfiguration()
         configureStatusItem()
         configureMainMenu()
-        configureVisibilityFallback()
 
         let overlay = GestureOverlay()
         captureCoordinator.setGestureOverlay(overlay)
@@ -148,18 +146,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updatePermissionMenus()
     }
 
-    private func configureVisibilityFallback() {
-        let iceIsRunning = NSWorkspace.shared.runningApplications.contains {
-            $0.bundleIdentifier == "com.jordanbaird.Ice"
-        }
-        guard iceIsRunning else { return }
-        usesDockFallback = true
-        NSApplication.shared.setActivationPolicy(.regular)
-        DiagnosticLogger.shared.log(
-            "Ice menu bar manager detected; Dock fallback enabled"
-        )
-    }
-
     private func configureMainMenu() {
         let mainMenu = NSMenu()
 
@@ -239,7 +225,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restoreBackgroundActivationPolicy() {
-        guard !usesDockFallback else { return }
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
