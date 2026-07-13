@@ -11,7 +11,7 @@ final class EdgeScrollController {
     }
 
     func adjust(_ edge: ScreenEdge, by direction: CGFloat, step _: Double) -> Bool {
-        let increase = direction > 0
+        let increase = direction < 0
         let key: MediaKey
         switch edge {
         case .left: key = increase ? .brightnessUp : .brightnessDown
