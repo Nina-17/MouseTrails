@@ -264,7 +264,7 @@ final class GestureMonitor: NSObject {
         // path, but pace continuous scrolling so it does not race to either
         // endpoint while preserving the established mouse-wheel feel.
         let isContinuous = event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0
-        edgeCooldown.interval = isContinuous ? max(options.cooldown, 0.25) : options.cooldown
+        edgeCooldown.interval = isContinuous ? max(options.cooldown, 0.5) : options.cooldown
         guard edgeCooldown.shouldFire(edge: edge, now: now) else { return }
         let succeeded = edgeScrollController.adjust(edge, by: delta > 0 ? 1 : -1, step: options.step)
         DiagnosticLogger.shared.log(
