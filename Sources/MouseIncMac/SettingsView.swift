@@ -42,6 +42,7 @@ struct SettingsView: View {
             numberField("简化容差", value: $model.draft.gestureOptions.simplificationTolerance)
             numberField("最小手势长度", value: $model.draft.gestureOptions.minimumGestureLength)
             numberField("最长持续时间", value: $model.draft.gestureOptions.maximumDuration)
+            numberField("触控板断点续画宽限（秒）", value: $model.draft.gestureOptions.continuationGrace)
         }
     }
 

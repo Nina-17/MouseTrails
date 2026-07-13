@@ -20,6 +20,8 @@ final class GestureMonitor: NSObject {
     private var runLoopSource: CFRunLoopSource?
     private var session = GestureSession()
     private var timeoutTask: Task<Void, Never>?
+    private var continuationTask: Task<Void, Never>?
+    private var awaitingContinuation = false
     private var didLogDrag = false
     private var edgeCooldown = EdgeScrollCooldown()
 
@@ -45,6 +47,7 @@ final class GestureMonitor: NSObject {
 
     deinit {
         timeoutTask?.cancel()
+        continuationTask?.cancel()
     }
 
     func start() -> StartResult {
@@ -136,6 +139,12 @@ final class GestureMonitor: NSObject {
                 return Unmanaged.passUnretained(event)
             }
 
+            if awaitingContinuation, session.phase == .gesture {
+                cancelContinuation()
+                DiagnosticLogger.shared.log("Gesture continuation resumed")
+                return nil
+            }
+
             clearSession()
             let settings = GestureSession.Settings(
                 startDistance: options.startDistance,
@@ -163,6 +172,8 @@ final class GestureMonitor: NSObject {
                 return Unmanaged.passUnretained(event)
             }
 
+            cancelContinuation()
+
             let deltaX = CGFloat(event.getDoubleValueField(.mouseEventDeltaX))
             let deltaY = CGFloat(event.getDoubleValueField(.mouseEventDeltaY))
             if !didLogDrag {
@@ -186,62 +197,12 @@ final class GestureMonitor: NSObject {
                 return Unmanaged.passUnretained(event)
             }
 
-            timeoutTask?.cancel()
-            timeoutTask = nil
-            overlay.hide()
-
-            switch session.finish(at: now) {
-            case .passthrough:
-                didLogDrag = false
-                return Unmanaged.passUnretained(event)
-
-            case let .recognize(points, targetBundleIdentifier):
-                let recognizer = GestureRecognizer(
-                    simplificationTolerance: options.simplificationTolerance,
-                    minimumGestureLength: options.minimumGestureLength
-                )
-                if let gesture = recognizer.recognize(points) {
-                    if let binding = configuration.binding(
-                        for: gesture,
-                        bundleIdentifier: targetBundleIdentifier
-                    ) {
-                        executor.execute(
-                            binding.actions,
-                            options: configuration.actionSequenceOptions,
-                            context: .init(gestureBounds: Self.boundingRect(of: points))
-                        )
-                        logger.info("Gesture matched: \(gesture, privacy: .public)")
-                        DiagnosticLogger.shared.log("Gesture matched: \(gesture); action=\(binding.name)")
-                        onGesture?("\(gesture) · \(binding.name)")
-                    } else {
-                        logger.info("Gesture has no binding: \(gesture, privacy: .public)")
-                        DiagnosticLogger.shared.log("Gesture has no binding: \(gesture)")
-                        if options.reportsFailures {
-                            onGesture?("\(gesture) · 未绑定")
-                        }
-                    }
-                } else {
-                    logger.info("Gesture was not recognized")
-                    DiagnosticLogger.shared.log("Gesture was not recognized; pointCount=\(points.count)")
-                    if options.reportsFailures {
-                        onGesture?("未识别")
-                    }
-                }
-
-            case let .replay(replay):
-                logger.debug("Replaying a regular right click")
-                DiagnosticLogger.shared.log("Movement below threshold; replaying right click")
-                replayRightClick(
-                    at: replay.quartzPoint,
-                    flags: replay.flags,
-                    clickState: replay.clickState
-                )
-
-            case .cancelled:
-                logger.debug("Timed-out gesture cancelled without replay")
+            if session.phase == .gesture, options.continuationGrace > 0 {
+                scheduleContinuation(after: options.continuationGrace)
+                return nil
             }
 
-            didLogDrag = false
+            finishActiveSession(configuration: configuration, options: options, now: now)
             return nil
 
         default:
@@ -347,9 +308,86 @@ final class GestureMonitor: NSObject {
         }
     }
 
+    private func scheduleContinuation(after duration: TimeInterval) {
+        continuationTask?.cancel()
+        awaitingContinuation = true
+        let nanoseconds = UInt64(min(max(0, duration), 2) * 1_000_000_000)
+        continuationTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: nanoseconds)
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.awaitingContinuation = false
+            self.continuationTask = nil
+            let configuration = self.configurationProvider()
+            self.finishActiveSession(
+                configuration: configuration,
+                options: configuration.gestureOptions,
+                now: ProcessInfo.processInfo.systemUptime
+            )
+        }
+    }
+
+    private func cancelContinuation() {
+        continuationTask?.cancel()
+        continuationTask = nil
+        awaitingContinuation = false
+    }
+
+    private func finishActiveSession(
+        configuration: AppConfiguration,
+        options: GestureOptions,
+        now: TimeInterval
+    ) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
+        cancelContinuation()
+        overlay.hide()
+
+        switch session.finish(at: now) {
+        case .passthrough:
+            break
+        case let .recognize(points, targetBundleIdentifier):
+            let recognizer = GestureRecognizer(
+                simplificationTolerance: options.simplificationTolerance,
+                minimumGestureLength: options.minimumGestureLength
+            )
+            if let gesture = recognizer.recognize(points) {
+                if let binding = configuration.binding(for: gesture, bundleIdentifier: targetBundleIdentifier) {
+                    executor.execute(
+                        binding.actions,
+                        options: configuration.actionSequenceOptions,
+                        context: .init(gestureBounds: Self.boundingRect(of: points))
+                    )
+                    logger.info("Gesture matched: \(gesture, privacy: .public)")
+                    DiagnosticLogger.shared.log("Gesture matched: \(gesture); action=\(binding.name)")
+                    onGesture?("\(gesture) · \(binding.name)")
+                } else {
+                    logger.info("Gesture has no binding: \(gesture, privacy: .public)")
+                    DiagnosticLogger.shared.log("Gesture has no binding: \(gesture)")
+                    if options.reportsFailures { onGesture?("\(gesture) · 未绑定") }
+                }
+            } else {
+                logger.info("Gesture was not recognized")
+                DiagnosticLogger.shared.log("Gesture was not recognized; pointCount=\(points.count)")
+                if options.reportsFailures { onGesture?("未识别") }
+            }
+        case let .replay(replay):
+            logger.debug("Replaying a regular right click")
+            DiagnosticLogger.shared.log("Movement below threshold; replaying right click")
+            replayRightClick(at: replay.quartzPoint, flags: replay.flags, clickState: replay.clickState)
+        case .cancelled:
+            logger.debug("Timed-out gesture cancelled without right-click replay")
+        }
+        didLogDrag = false
+    }
+
     private func expireActiveSession() {
         switch session.expire(at: ProcessInfo.processInfo.systemUptime) {
         case let .expired(replayOnMouseUp):
+            cancelContinuation()
             overlay.hide()
             logTimeout(replayOnMouseUp: replayOnMouseUp)
             timeoutTask = nil
@@ -377,6 +415,7 @@ final class GestureMonitor: NSObject {
     private func clearSession() {
         timeoutTask?.cancel()
         timeoutTask = nil
+        cancelContinuation()
         overlay.hide()
         session.reset()
         didLogDrag = false
