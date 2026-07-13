@@ -12,6 +12,7 @@ struct SettingsView: View {
                 sequenceSection
                 bindingsSection
                 permissionSection
+                pinnedImageHelpSection
                 configurationFilesSection
                 validationSection
             }
@@ -211,6 +212,15 @@ struct SettingsView: View {
             Text("恢复前会先在配置目录保存当前文件的时间戳备份。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var pinnedImageHelpSection: some View {
+        Section("贴图操作") {
+            Text("左键拖动；单击折叠或恢复；右键关闭")
+            Text("Option + 滚轮：调整透明度（20%–100%）")
+            Text("方向键：移动 1 点；Shift + 方向键：移动 10 点")
+            Text("Command+C：复制；Command+S：保存；Command+Shift+O：OCR")
         }
     }
 

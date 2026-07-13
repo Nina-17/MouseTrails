@@ -81,22 +81,26 @@ final class CaptureCoordinator: NSObject {
     private func recognizeText(rect: CGRect) async {
         do {
             let image = try await captureImage(in: rect)
-            let text = try await OCRTextRecognizer.recognize(image)
-            if text.isEmpty {
-                notificationCoordinator.postOCRResult(text: "")
-            } else {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-                notificationCoordinator.postOCRResult(text: text)
-            }
-            DiagnosticLogger.shared.log(
-                "OCR completed; hasText=\(!text.isEmpty); copied=\(!text.isEmpty)"
-            )
+            try await recognizeAndCopy(image)
         } catch {
             DiagnosticLogger.shared.log("OCR failed: \(error.localizedDescription)")
             presentError(title: "文字识别失败", message: error.localizedDescription)
         }
+    }
+
+    private func recognizeAndCopy(_ image: CGImage) async throws {
+        let text = try await OCRTextRecognizer.recognize(image)
+        if text.isEmpty {
+            notificationCoordinator.postOCRResult(text: "")
+        } else {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            notificationCoordinator.postOCRResult(text: text)
+        }
+        DiagnosticLogger.shared.log(
+            "OCR completed; hasText=\(!text.isEmpty); copied=\(!text.isEmpty)"
+        )
     }
 
     private func captureImage(in rect: CGRect) async throws -> CGImage {
@@ -201,6 +205,16 @@ final class CaptureCoordinator: NSObject {
         controller.onClose = { [weak self, weak controller] in
             guard let self, let controller else { return }
             self.pinnedWindows.removeAll { $0 === controller }
+        }
+        controller.onOCR = { [weak self] image in
+            Task { @MainActor [weak self] in
+                do {
+                    try await self?.recognizeAndCopy(image)
+                } catch {
+                    DiagnosticLogger.shared.log("Pinned image OCR failed")
+                    self?.presentError(title: "文字识别失败", message: error.localizedDescription)
+                }
+            }
         }
         pinnedWindows.append(controller)
         controller.show()
@@ -359,9 +373,65 @@ private final class OneFrameStreamCapture: NSObject, SCStreamOutput, @unchecked 
     }
 }
 
+struct PinnedImageInteractionState: Equatable {
+    private(set) var frame: CGRect
+    private(set) var expandedFrame: CGRect
+    private(set) var isCompact = false
+    private(set) var opacity: CGFloat = 1
+
+    init(frame: CGRect) {
+        self.frame = frame
+        expandedFrame = frame
+    }
+
+    mutating func synchronize(with frame: CGRect) {
+        self.frame = frame
+        if !isCompact { expandedFrame = frame }
+    }
+
+    mutating func toggleCompact(side: CGFloat = 72) {
+        if isCompact {
+            frame = expandedFrame
+            isCompact = false
+        } else {
+            expandedFrame = frame
+            frame = CGRect(
+                x: frame.midX - side / 2,
+                y: frame.maxY - side,
+                width: side,
+                height: side
+            )
+            isCompact = true
+        }
+    }
+
+    mutating func moveBy(dx: CGFloat, dy: CGFloat) {
+        frame.origin.x += dx
+        frame.origin.y += dy
+        if isCompact {
+            expandedFrame.origin.x += dx
+            expandedFrame.origin.y += dy
+        } else {
+            expandedFrame = frame
+        }
+    }
+
+    mutating func adjustOpacity(by delta: CGFloat) {
+        opacity = min(1, max(0.2, opacity + delta))
+    }
+}
+
+private final class PinnedImagePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
 @MainActor
 private final class PinnedImageWindowController: NSWindowController, NSWindowDelegate {
     var onClose: (() -> Void)?
+    var onOCR: ((CGImage) -> Void)? {
+        didSet { imageView?.onOCR = onOCR }
+    }
+    private weak var imageView: PinnedImageView?
 
     init(image: CGImage, sourceRect: CGRect) {
         let maximumWidth: CGFloat = 800
@@ -374,7 +444,7 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
             x: sourceRect.midX - size.width / 2,
             y: sourceRect.midY - size.height / 2
         )
-        let panel = NSPanel(
+        let panel = PinnedImagePanel(
             contentRect: CGRect(origin: origin, size: size),
             styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
@@ -390,8 +460,10 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
         panel.contentAspectRatio = size
         panel.minSize = CGSize(width: 120, height: 80)
         panel.isReleasedWhenClosed = false
-        panel.contentView = PinnedImageView(image: NSImage(cgImage: image, size: size))
+        let imageView = PinnedImageView(image: image, frame: panel.frame)
+        panel.contentView = imageView
         super.init(window: panel)
+        self.imageView = imageView
         panel.delegate = self
     }
 
@@ -401,6 +473,10 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
 
     func show() {
         window?.orderFrontRegardless()
+        window?.makeKey()
+        if let imageView {
+            window?.makeFirstResponder(imageView)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -409,12 +485,15 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
 }
 
 private final class PinnedImageView: NSImageView {
-    private var expandedFrame: CGRect?
-    private var isCompact = false
+    var onOCR: ((CGImage) -> Void)?
+    private let sourceImage: CGImage
+    private var interactionState: PinnedImageInteractionState
 
-    init(image: NSImage) {
+    init(image: CGImage, frame: CGRect) {
+        sourceImage = image
+        interactionState = PinnedImageInteractionState(frame: frame)
         super.init(frame: .zero)
-        self.image = image
+        self.image = NSImage(cgImage: image, size: frame.size)
         imageScaling = .scaleProportionallyUpOrDown
         imageAlignment = .alignCenter
     }
@@ -423,8 +502,13 @@ private final class PinnedImageView: NSImageView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override var acceptsFirstResponder: Bool { true }
+
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
+        window.makeKey()
+        window.makeFirstResponder(self)
+        interactionState.synchronize(with: window.frame)
         let initialMouse = NSEvent.mouseLocation
         let initialOrigin = window.frame.origin
         var didDrag = false
@@ -442,7 +526,15 @@ private final class PinnedImageView: NSImageView {
                     CGPoint(x: initialOrigin.x + delta.x, y: initialOrigin.y + delta.y)
                 )
             case .leftMouseUp:
-                if !didDrag { toggleCompact() }
+                if didDrag {
+                    let finalOrigin = window.frame.origin
+                    interactionState.moveBy(
+                        dx: finalOrigin.x - initialOrigin.x,
+                        dy: finalOrigin.y - initialOrigin.y
+                    )
+                } else {
+                    toggleCompact()
+                }
                 return
             default:
                 break
@@ -454,26 +546,79 @@ private final class PinnedImageView: NSImageView {
         window?.close()
     }
 
-    private func toggleCompact() {
-        guard let window else { return }
-        if isCompact, let expandedFrame {
-            imageScaling = .scaleProportionallyUpOrDown
-            window.setFrame(expandedFrame, display: true, animate: true)
-            isCompact = false
+    override func scrollWheel(with event: NSEvent) {
+        guard event.modifierFlags.contains(.option), let window else {
+            super.scrollWheel(with: event)
             return
         }
+        let direction: CGFloat = event.scrollingDeltaY >= 0 ? 1 : -1
+        interactionState.adjustOpacity(by: direction * 0.05)
+        window.alphaValue = interactionState.opacity
+    }
 
-        expandedFrame = window.frame
-        let side: CGFloat = 72
-        let compactFrame = CGRect(
-            x: window.frame.midX - side / 2,
-            y: window.frame.maxY - side,
-            width: side,
-            height: side
-        )
-        imageScaling = .scaleNone
+    override func keyDown(with event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased() {
+            switch key {
+            case "c":
+                copyImage()
+                return
+            case "s":
+                saveImage()
+                return
+            case "o" where modifiers.contains(.shift):
+                onOCR?(sourceImage)
+                return
+            default:
+                break
+            }
+        }
+
+        let distance: CGFloat = modifiers.contains(.shift) ? 10 : 1
+        let delta: CGPoint
+        switch event.keyCode {
+        case 123: delta = CGPoint(x: -distance, y: 0)
+        case 124: delta = CGPoint(x: distance, y: 0)
+        case 125: delta = CGPoint(x: 0, y: -distance)
+        case 126: delta = CGPoint(x: 0, y: distance)
+        default:
+            super.keyDown(with: event)
+            return
+        }
+        guard let window else { return }
+        interactionState.synchronize(with: window.frame)
+        interactionState.moveBy(dx: delta.x, dy: delta.y)
+        window.setFrame(interactionState.frame, display: true)
+    }
+
+    private func toggleCompact() {
+        guard let window else { return }
+        interactionState.synchronize(with: window.frame)
+        interactionState.toggleCompact()
+        imageScaling = interactionState.isCompact ? .scaleNone : .scaleProportionallyUpOrDown
         imageAlignment = .alignCenter
-        window.setFrame(compactFrame, display: true, animate: true)
-        isCompact = true
+        window.setFrame(interactionState.frame, display: true, animate: true)
+    }
+
+    private func copyImage() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([NSImage(cgImage: sourceImage, size: .zero)])
+    }
+
+    private func saveImage() {
+        guard let data = NSBitmapImageRep(cgImage: sourceImage)
+            .representation(using: .png, properties: [:]) else { return }
+        let panel = NSSavePanel()
+        panel.title = "保存贴图"
+        panel.nameFieldStringValue = "MouseIncMac-贴图.png"
+        panel.allowedContentTypes = [.png]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
     }
 }
