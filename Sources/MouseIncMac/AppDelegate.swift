@@ -9,9 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
     private var permissionItem: NSMenuItem?
-    private var screenRecordingPermissionItem: NSMenuItem?
-    private var inputMonitoringPermissionItem: NSMenuItem?
-    private var monitorItem: NSMenuItem?
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
     private var settingsWindowController: SettingsWindowController?
@@ -89,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
 
         let enabledItem = NSMenuItem(
-            title: "启用鼠标与触控板手势",
+            title: "启用 MouseTrails",
             action: #selector(toggleEnabled(_:)),
             keyEquivalent: ""
         )
@@ -97,55 +94,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enabledItem.state = configuration.enabled ? .on : .off
         menu.addItem(enabledItem)
 
-        let trackpadUsageItem = NSMenuItem(
-            title: "触控板：辅助点击并按住后拖动；短点击仍为右键",
-            action: nil,
-            keyEquivalent: ""
-        )
-        trackpadUsageItem.isEnabled = false
-        menu.addItem(trackpadUsageItem)
-
-        let openTrackpadSettingsItem = NSMenuItem(
-            title: "打开触控板设置…",
-            action: #selector(openTrackpadSettings),
-            keyEquivalent: ""
-        )
-        openTrackpadSettingsItem.target = self
-        menu.addItem(openTrackpadSettingsItem)
+        let lastGestureItem = NSMenuItem(title: "最近手势：无", action: nil, keyEquivalent: "")
+        lastGestureItem.isEnabled = false
+        menu.addItem(lastGestureItem)
 
         let permissionItem = NSMenuItem(
-            title: "辅助功能权限：检查中…",
-            action: #selector(openAccessibilitySettings),
+            title: "权限状态：检查中…",
+            action: #selector(openPermissions),
             keyEquivalent: ""
         )
         permissionItem.target = self
         menu.addItem(permissionItem)
-
-        let screenRecordingPermissionItem = NSMenuItem(
-            title: "屏幕录制权限：未使用",
-            action: #selector(requestScreenRecordingPermission),
-            keyEquivalent: ""
-        )
-        screenRecordingPermissionItem.target = self
-        menu.addItem(screenRecordingPermissionItem)
-
-        let inputMonitoringPermissionItem = NSMenuItem(
-            title: "输入监控权限：未使用",
-            action: nil,
-            keyEquivalent: ""
-        )
-        inputMonitoringPermissionItem.isEnabled = false
-        menu.addItem(inputMonitoringPermissionItem)
-
-        let monitorItem = NSMenuItem(title: "监听状态：未启动", action: nil, keyEquivalent: "")
-        monitorItem.isEnabled = false
-        menu.addItem(monitorItem)
-
-        menu.addItem(.separator())
-
-        let lastGestureItem = NSMenuItem(title: "最近手势：无", action: nil, keyEquivalent: "")
-        lastGestureItem.isEnabled = false
-        menu.addItem(lastGestureItem)
 
         let settingsItem = NSMenuItem(
             title: "打开设置…",
@@ -179,24 +138,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
 
-        menu.addItem(.separator())
-
-        let quitItem = NSMenuItem(
-            title: "退出 MouseTrails",
-            action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"
-        )
-        menu.addItem(quitItem)
-
         statusItem.menu = menu
         statusItem.autosaveName = "MouseIncMac.StatusItem"
         statusItem.isVisible = true
         self.statusItem = statusItem
         self.enabledItem = enabledItem
         self.permissionItem = permissionItem
-        self.screenRecordingPermissionItem = screenRecordingPermissionItem
-        self.inputMonitoringPermissionItem = inputMonitoringPermissionItem
-        self.monitorItem = monitorItem
         self.lastGestureItem = lastGestureItem
         updatePermissionMenus()
     }
@@ -328,39 +275,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updatePermissionMenus() {
         let permissions = PermissionCoordinator.snapshot
-        permissionItem?.title = permissions[.accessibility] == .granted
-            ? "辅助功能权限：已授权"
-            : "辅助功能权限：需要授权…"
-        screenRecordingPermissionItem?.title = permissionTitle(
-            name: "屏幕录制",
-            state: permissions[.screenRecording],
-            currentlyRequired: configuration.requiredPermissions.contains(.screenRecording)
-        )
-        inputMonitoringPermissionItem?.title = permissionTitle(
-            name: "输入监控",
-            state: permissions[.inputMonitoring],
-            currentlyRequired: false
-        )
-        monitorItem?.title = monitor?.isRunning == true ? "监听状态：已启动" : "监听状态：未启动"
+        let required = configuration.requiredPermissions.union([.accessibility])
+        let missing = SystemPermission.allCases.filter {
+            required.contains($0) && permissions[$0] != .granted
+        }
+        if missing.isEmpty {
+            permissionItem?.title = "✅ 权限状态：已授权"
+        } else {
+            let names = missing.map(permissionName).joined(separator: "、")
+            permissionItem?.title = "❌ 权限状态：\(names)未授权"
+        }
     }
 
-    private func permissionTitle(
-        name: String,
-        state: PermissionState,
-        currentlyRequired: Bool
-    ) -> String {
-        if !currentlyRequired, state != .granted {
-            return "\(name)权限：当前功能未使用"
-        }
-        switch state {
-        case .granted:
-            return "\(name)权限：已授权"
-        case .denied:
-            return "\(name)权限：未授权"
-        case .notDetermined:
-            return "\(name)权限：未请求"
-        case .unavailable:
-            return "\(name)权限：不可用"
+    private func permissionName(_ permission: SystemPermission) -> String {
+        switch permission {
+        case .accessibility: return "辅助功能"
+        case .screenRecording: return "屏幕录制"
+        case .inputMonitoring: return "输入监控"
         }
     }
 
@@ -374,34 +305,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func openAccessibilitySettings() {
-        if AccessibilityPermission.isGranted {
-            startMonitor()
-            return
-        }
-        AccessibilityPermission.request()
-        AccessibilityPermission.openSystemSettings()
-        updatePermissionMenus()
-    }
-
-    @objc private func openTrackpadSettings() {
-        guard
-            let url = URL(string: "x-apple.systempreferences:com.apple.Trackpad-Settings.extension"),
-            NSWorkspace.shared.open(url)
-        else {
-            presentError(
-                title: "无法打开触控板设置",
-                message: "请手动前往“系统设置 → 触控板”。"
-            )
-            return
-        }
-    }
-
-    @objc private func requestScreenRecordingPermission() {
-        if !CGPreflightScreenCaptureAccess() {
-            _ = CGRequestScreenCaptureAccess()
-        }
-        updatePermissionMenus()
+    @objc private func openPermissions() {
+        showSettings(page: .permissions)
     }
 
     @objc private func openConfiguration() {
@@ -414,6 +319,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
+        showSettings(page: nil)
+    }
+
+    private func showSettings(page: SettingsPage?) {
         activateForSettings()
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
@@ -442,7 +351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }
-        settingsWindowController?.show(configuration: configuration)
+        settingsWindowController?.show(configuration: configuration, page: page)
     }
 
     @objc private func reloadConfiguration() {

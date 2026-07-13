@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let model: SettingsViewModel
+    private let navigation = SettingsNavigation()
     private let closeHandler: @MainActor () -> Void
 
     init(
@@ -21,7 +22,9 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             exportHandler: exportHandler,
             restoreHandler: restoreHandler
         )
-        let hostingController = NSHostingController(rootView: SettingsView(model: model))
+        let hostingController = NSHostingController(
+            rootView: SettingsView(model: model, navigation: navigation)
+        )
         let window = NSWindow(contentViewController: hostingController)
         window.title = "MouseTrails 设置"
         window.setContentSize(NSSize(width: 1040, height: 740))
@@ -39,7 +42,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func show(configuration: AppConfiguration) {
+    func show(configuration: AppConfiguration, page: SettingsPage? = nil) {
+        if let page {
+            navigation.selectedPage = page
+        }
         model.reload(configuration)
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)

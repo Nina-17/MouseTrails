@@ -6,12 +6,12 @@ struct SettingsView: View {
     private static let standardContentWidth: CGFloat = 720
 
     @ObservedObject var model: SettingsViewModel
-    @State private var selectedPage: SettingsPage = .general
+    @ObservedObject var navigation: SettingsNavigation
     @State private var selectedBindingID: UUID?
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsPage.allCases, selection: $selectedPage) { page in
+            List(SettingsPage.allCases, selection: $navigation.selectedPage) { page in
                 Label(page.title, systemImage: page.systemImage)
                     .tag(page)
             }
@@ -34,14 +34,14 @@ struct SettingsView: View {
     private var pageHeader: some View {
         HStack {
             HStack(spacing: 14) {
-                Image(systemName: selectedPage.systemImage)
+                Image(systemName: navigation.selectedPage.systemImage)
                     .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(.tint)
                     .frame(width: 34)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(selectedPage.title)
+                    Text(navigation.selectedPage.title)
                         .font(.title2.weight(.semibold))
-                    Text(selectedPage.subtitle)
+                    Text(navigation.selectedPage.subtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -55,7 +55,7 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var pageContent: some View {
-        switch selectedPage {
+        switch navigation.selectedPage {
         case .general:
             Form {
                 gestureSection
@@ -111,7 +111,7 @@ struct SettingsView: View {
     }
 
     private var contentColumnWidth: CGFloat {
-        selectedPage == .bindings ? .infinity : Self.standardContentWidth
+        navigation.selectedPage == .bindings ? .infinity : Self.standardContentWidth
     }
 
     private var gestureSection: some View {
@@ -755,7 +755,12 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsPage: String, CaseIterable, Identifiable {
+@MainActor
+final class SettingsNavigation: ObservableObject {
+    @Published var selectedPage: SettingsPage = .general
+}
+
+enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case bindings
     case edgeScroll
