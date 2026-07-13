@@ -3,15 +3,18 @@ import MouseIncCore
 import SwiftUI
 
 @MainActor
-final class SettingsWindowController: NSWindowController {
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let model: SettingsViewModel
+    private let closeHandler: @MainActor () -> Void
 
     init(
         configuration: AppConfiguration,
         saveHandler: @escaping @MainActor (AppConfiguration) throws -> Void,
         exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void,
-        restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration
+        restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration,
+        closeHandler: @escaping @MainActor () -> Void = {}
     ) {
+        self.closeHandler = closeHandler
         model = SettingsViewModel(
             configuration: configuration,
             saveHandler: saveHandler,
@@ -28,6 +31,7 @@ final class SettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         window.center()
         super.init(window: window)
+        window.delegate = self
     }
 
     @available(*, unavailable)
@@ -40,5 +44,9 @@ final class SettingsWindowController: NSWindowController {
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        closeHandler()
     }
 }

@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastGestureItem: NSMenuItem?
     private var monitor: GestureMonitor?
     private var settingsWindowController: SettingsWindowController?
+    private var usesDockFallback = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let permissions = PermissionCoordinator.snapshot
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         loadConfiguration()
         configureStatusItem()
+        configureMainMenu()
         configureVisibilityFallback()
 
         let overlay = GestureOverlay()
@@ -203,10 +205,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             $0.bundleIdentifier == "com.jordanbaird.Ice"
         }
         guard iceIsRunning else { return }
+        usesDockFallback = true
         NSApplication.shared.setActivationPolicy(.regular)
         DiagnosticLogger.shared.log(
             "Ice menu bar manager detected; Dock fallback enabled"
         )
+    }
+
+    private func configureMainMenu() {
+        let mainMenu = NSMenu()
+
+        let applicationItem = NSMenuItem()
+        let applicationMenu = NSMenu(title: "MouseIncMac")
+        applicationMenu.addItem(
+            withTitle: "关于 MouseIncMac",
+            action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+            keyEquivalent: ""
+        )
+        applicationMenu.addItem(.separator())
+        let settingsItem = NSMenuItem(
+            title: "设置…",
+            action: #selector(openSettings),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        applicationMenu.addItem(settingsItem)
+        applicationMenu.addItem(.separator())
+        applicationMenu.addItem(
+            withTitle: "隐藏 MouseIncMac",
+            action: #selector(NSApplication.hide(_:)),
+            keyEquivalent: "h"
+        )
+        let hideOthers = applicationMenu.addItem(
+            withTitle: "隐藏其他应用",
+            action: #selector(NSApplication.hideOtherApplications(_:)),
+            keyEquivalent: "h"
+        )
+        hideOthers.keyEquivalentModifierMask = [.command, .option]
+        applicationMenu.addItem(
+            withTitle: "显示全部",
+            action: #selector(NSApplication.unhideAllApplications(_:)),
+            keyEquivalent: ""
+        )
+        applicationMenu.addItem(.separator())
+        applicationMenu.addItem(
+            withTitle: "退出 MouseIncMac",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        applicationItem.submenu = applicationMenu
+        mainMenu.addItem(applicationItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "编辑")
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "窗口")
+        windowMenu.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowMenu.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(
+            withTitle: "前置所有窗口",
+            action: #selector(NSApplication.arrangeInFront(_:)),
+            keyEquivalent: ""
+        )
+        windowItem.submenu = windowMenu
+        mainMenu.addItem(windowItem)
+        NSApplication.shared.windowsMenu = windowMenu
+        NSApplication.shared.mainMenu = mainMenu
+    }
+
+    private func activateForSettings() {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func restoreBackgroundActivationPolicy() {
+        guard !usesDockFallback else { return }
+        NSApplication.shared.setActivationPolicy(.accessory)
     }
 
     private func loadConfiguration() {
@@ -327,6 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openSettings() {
+        activateForSettings()
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController(
                 configuration: configuration,
@@ -350,7 +437,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.lastGestureItem?.title = "最近手势：配置已恢复"
                     self.updatePermissionMenus()
                     return configuration
-                }
+                },
+                closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }
         settingsWindowController?.show(configuration: configuration)
