@@ -89,7 +89,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         )
         enabledItem.target = self
-        enabledItem.state = configuration.enabled ? .on : .off
+        enabledItem.state = .off
+        enabledItem.image = enabledStatusImage()
         menu.addItem(enabledItem)
 
         let lastGestureItem = NSMenuItem(title: "最近手势：无", action: nil, keyEquivalent: "")
@@ -134,10 +135,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ","
         )
         settingsItem.target = self
-        settingsItem.image = NSImage(
-            systemSymbolName: "gearshape",
-            accessibilityDescription: "打开设置"
-        )
         menu.addItem(settingsItem)
 
         statusItem.menu = menu
@@ -232,6 +229,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
+    private func enabledStatusImage() -> NSImage? {
+        guard configuration.enabled else { return nil }
+        return NSImage(
+            systemSymbolName: "checkmark",
+            accessibilityDescription: "已启用"
+        )
+    }
+
+    private func updateEnabledMenuItem() {
+        enabledItem?.state = .off
+        enabledItem?.image = enabledStatusImage()
+    }
+
     private func loadConfiguration() {
         do {
             configuration = try configStore.loadOrCreate()
@@ -286,7 +296,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleEnabled(_ sender: NSMenuItem) {
         configuration.enabled.toggle()
-        sender.state = configuration.enabled ? .on : .off
+        updateEnabledMenuItem()
         do {
             try configStore.save(configuration)
         } catch {
@@ -320,7 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self else { return }
                     try self.configStore.save(configuration)
                     self.configuration = configuration
-                    self.enabledItem?.state = configuration.enabled ? .on : .off
+                    self.updateEnabledMenuItem()
                     self.lastGestureItem?.title = "最近手势：配置已保存"
                     self.updatePermissionMenus()
                 },
@@ -332,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self else { throw CocoaError(.fileNoSuchFile) }
                     let configuration = try self.configStore.restore(from: url)
                     self.configuration = configuration
-                    self.enabledItem?.state = configuration.enabled ? .on : .off
+                    self.updateEnabledMenuItem()
                     self.lastGestureItem?.title = "最近手势：配置已恢复"
                     self.updatePermissionMenus()
                     return configuration
@@ -345,7 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadConfiguration() {
         loadConfiguration()
-        enabledItem?.state = configuration.enabled ? .on : .off
+        updateEnabledMenuItem()
         lastGestureItem?.title = "最近手势：配置已重载"
         if AccessibilityPermission.isGranted {
             startMonitor()
