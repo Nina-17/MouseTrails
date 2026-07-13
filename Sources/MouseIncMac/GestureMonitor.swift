@@ -252,14 +252,20 @@ final class GestureMonitor: NSObject {
     private func handleEdgeScroll(event: CGEvent, configuration: AppConfiguration, now: TimeInterval) {
         let options = configuration.edgeScrollOptions
         guard options.enabled, !session.isActive else { return }
-        let delta = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
+        let lineDelta = event.getDoubleValueField(.scrollWheelEventDeltaAxis1)
+        let pointDelta = event.getDoubleValueField(.scrollWheelEventPointDeltaAxis1)
+        let delta = pointDelta != 0 ? pointDelta : lineDelta
         guard delta != 0 else { return }
         let detector = EdgeScrollDetector(inset: options.inset)
         guard let edge = detector.edge(at: NSEvent.mouseLocation, in: NSScreen.screens.map(\.frame)),
               edge == .left || edge == .right else { return }
         edgeCooldown.interval = options.cooldown
         guard edgeCooldown.shouldFire(edge: edge, now: now) else { return }
-        if edgeScrollController.adjust(edge, by: delta > 0 ? 1 : -1, step: options.step) {
+        let succeeded = edgeScrollController.adjust(edge, by: delta > 0 ? 1 : -1, step: options.step)
+        DiagnosticLogger.shared.log(
+            "Edge scroll edge=\(edge.rawValue) delta=\(delta) adjusted=\(succeeded)"
+        )
+        if succeeded {
             onGesture?(edge == .left ? "边缘亮度" : "边缘音量")
         }
     }

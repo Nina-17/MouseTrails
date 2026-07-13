@@ -18,6 +18,7 @@ final class EdgeScrollController {
 
     private func adjustBrightness(by direction: CGFloat, step: Float) -> Bool {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) else {
+            DiagnosticLogger.shared.log("Edge brightness failed: no screen at cursor")
             return false
         }
         let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
@@ -26,10 +27,13 @@ final class EdgeScrollController {
         let display = IODisplayForFramebuffer(framebuffer, 0)
         var current: Float = 0
         guard IODisplayGetFloatParameter(display, 0, kIODisplayBrightnessKey as CFString, &current) == kIOReturnSuccess else {
+            DiagnosticLogger.shared.log("Edge brightness unsupported by display")
             return false
         }
         let next = min(1, max(0, current + Float(direction) * step))
-        return IODisplaySetFloatParameter(display, 0, kIODisplayBrightnessKey as CFString, next) == kIOReturnSuccess
+        let result = IODisplaySetFloatParameter(display, 0, kIODisplayBrightnessKey as CFString, next) == kIOReturnSuccess
+        if !result { DiagnosticLogger.shared.log("Edge brightness set failed") }
+        return result
     }
 
     private func adjustVolume(by direction: CGFloat, step: Float) -> Bool {
@@ -49,11 +53,16 @@ final class EdgeScrollController {
         var isSettable = DarwinBoolean(false)
         guard AudioObjectHasProperty(device, &address),
               AudioObjectIsPropertySettable(device, &address, &isSettable) == noErr,
-              isSettable.boolValue else { return false }
+              isSettable.boolValue else {
+            DiagnosticLogger.shared.log("Edge volume unsupported by default output")
+            return false
+        }
         var value: Float = 0
         size = UInt32(MemoryLayout<Float>.size)
         guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else { return false }
         value = min(1, max(0, value + Float(direction) * step))
-        return AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr
+        let result = AudioObjectSetPropertyData(device, &address, 0, nil, size, &value) == noErr
+        if !result { DiagnosticLogger.shared.log("Edge volume set failed") }
+        return result
     }
 }
