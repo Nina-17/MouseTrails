@@ -119,9 +119,6 @@ final class CaptureCoordinator: NSObject {
             false,
             onScreenWindowsOnly: true
         )
-        let ownApplication = content.applications.first {
-            $0.bundleIdentifier == Bundle.main.bundleIdentifier
-        }
 
         var segments: [CapturedSegment] = []
         for screen in NSScreen.screens {
@@ -136,16 +133,12 @@ final class CaptureCoordinator: NSObject {
                 continue
             }
 
-            let filter: SCContentFilter
-            if let ownApplication {
-                filter = SCContentFilter(
-                    display: display,
-                    excludingApplications: [ownApplication],
-                    exceptingWindows: []
-                )
-            } else {
-                filter = SCContentFilter(display: display, excludingWindows: [])
-            }
+            // Capture the same composited content the user sees, including
+            // MouseIncMac's settings and pinned-image windows. The gesture
+            // overlay is ordered out before actions execute, so excluding the
+            // entire application would only make its normal windows appear
+            // transparent and expose whatever is behind them.
+            let filter = SCContentFilter(display: display, excludingWindows: [])
 
             // SCDisplay dimensions are logical points, not output pixels.  Use
             // AppKit's backing scale so a Retina source region is requested at
