@@ -25,8 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateCoordinator.onStateChange = { [weak self] in
             self?.updateUpdateMenuItem()
         }
-        permissionAuthorizationCoordinator.onSnapshotChange = { [weak self] _ in
-            self?.updatePermissionMenus()
+        permissionAuthorizationCoordinator.onSnapshotChange = { [weak self] snapshot in
+            self?.handlePermissionSnapshotChange(snapshot)
         }
         tutorialCoordinator.onClose = { [weak self] in
             self?.restoreBackgroundActivationPolicy()
@@ -374,6 +374,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let names = missing.map(permissionName).joined(separator: "、")
             permissionItem?.title = "❌ 权限状态：\(names)未授权"
         }
+    }
+
+    private func handlePermissionSnapshotChange(_ snapshot: PermissionSnapshot) {
+        updatePermissionMenus()
+        guard snapshot[.accessibility] == .granted,
+              monitor?.isRunning != true else { return }
+
+        DiagnosticLogger.shared.log(
+            "Accessibility granted while running; starting gesture monitor"
+        )
+        startMonitor()
     }
 
     private func permissionName(_ permission: SystemPermission) -> String {
