@@ -5,6 +5,7 @@ enum DiagnosticEvent: String {
     case actionSequenceIgnored = "action.sequence.ignored"
     case actionSequenceCancelled = "action.sequence.cancelled"
     case actionSequenceFinished = "action.sequence.finished"
+    case actionInvoked = "action.invoked"
     case actionFailed = "action.failed"
     case permissionSnapshot = "permission.snapshot"
 }

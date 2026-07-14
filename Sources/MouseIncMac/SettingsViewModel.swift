@@ -23,8 +23,9 @@ final class SettingsViewModel: ObservableObject {
             throw CocoaError(.fileReadUnsupportedScheme)
         }
     ) {
-        draft = configuration
-        bindingIDs = configuration.bindings.map { _ in UUID() }
+        let normalizedConfiguration = Self.normalizingAutomaticBindingNames(in: configuration)
+        draft = normalizedConfiguration
+        bindingIDs = normalizedConfiguration.bindings.map { _ in UUID() }
         self.customGestureRecorder = customGestureRecorder
         self.saveHandler = saveHandler
         self.exportHandler = exportHandler
@@ -59,8 +60,9 @@ final class SettingsViewModel: ObservableObject {
         if customGestureRecorder.isRecording {
             customGestureRecorder.cancel()
         }
-        bindingIDs = configuration.bindings.map { _ in UUID() }
-        draft = configuration
+        let normalizedConfiguration = Self.normalizingAutomaticBindingNames(in: configuration)
+        bindingIDs = normalizedConfiguration.bindings.map { _ in UUID() }
+        draft = normalizedConfiguration
         saveMessage = nil
     }
 
@@ -281,10 +283,43 @@ final class SettingsViewModel: ObservableObject {
     private func updateDefaultNameIfNeeded(at bindingIndex: Int) {
         guard
             draft.bindings.indices.contains(bindingIndex),
-            draft.bindings[bindingIndex].name == "新手势",
+            Self.isAutomaticallyGeneratedName(draft.bindings[bindingIndex].name),
             let action = draft.bindings[bindingIndex].actions.first
         else { return }
         draft.bindings[bindingIndex].name = Self.actionName(action)
+    }
+
+    private static func isAutomaticallyGeneratedName(_ name: String) -> Bool {
+        if name == "新手势" || name.hasPrefix("快捷键 ") { return true }
+        var names: Set<String> = [
+            "打开 URL", "启动应用", "延时", "窗口操作", "系统视图与空间",
+            "截图与贴图", "离线 OCR", "搜索选中文字"
+        ]
+        names.formUnion(WindowAction.allCases.map {
+            actionName(.init(type: .windowAction, value: $0.rawValue))
+        })
+        names.formUnion(SystemViewAction.allCases.map {
+            actionName(.init(type: .systemViewAction, value: $0.rawValue))
+        })
+        names.formUnion(CaptureAction.allCases.map {
+            actionName(.init(type: .captureAction, value: $0.rawValue))
+        })
+        return names.contains(name)
+    }
+
+    private static func normalizingAutomaticBindingNames(
+        in source: AppConfiguration
+    ) -> AppConfiguration {
+        var configuration = source
+        for index in configuration.bindings.indices {
+            guard
+                configuration.bindings[index].name != "新手势",
+                isAutomaticallyGeneratedName(configuration.bindings[index].name),
+                let action = configuration.bindings[index].actions.first
+            else { continue }
+            configuration.bindings[index].name = actionName(action)
+        }
+        return configuration
     }
 
     private static func gestureSortKey(for gesture: String) -> (category: Int, order: Int, name: String) {
@@ -325,13 +360,6 @@ final class SettingsViewModel: ObservableObject {
             case .tileTopRight: return "右上四分之一"
             case .tileBottomLeft: return "左下四分之一"
             case .tileBottomRight: return "右下四分之一"
-            case .arrangeLeftRight: return "窗口左右排列"
-            case .arrangeRightLeft: return "窗口右左排列"
-            case .arrangeTopBottom: return "窗口上下排列"
-            case .arrangeBottomTop: return "窗口下上排列"
-            case .arrangeFour: return "窗口四等分"
-            case .arrangeLeftAndQuarters: return "窗口左侧与右侧上下排列"
-            case .arrangeRightAndQuarters: return "窗口右侧与左侧上下排列"
             case .minimize: return "最小化窗口"
             case .close: return "关闭窗口"
             case .closeAll: return "关闭所有类似窗口"

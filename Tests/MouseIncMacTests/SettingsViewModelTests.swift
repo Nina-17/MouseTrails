@@ -78,6 +78,26 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft.bindings[0].name, "快捷键 Command+V")
     }
 
+    func testExistingAutomaticNameIsNormalizedAndKeepsFollowingActionValue() {
+        let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "打开调度中心",
+                actions: [.init(type: .systemViewAction, value: SystemViewAction.appExpose.rawValue)]
+            )
+        ])) { _ in }
+
+        XCTAssertEqual(model.draft.bindings[0].name, "显示当前 App 窗口")
+
+        model.setActionValue(
+            SystemViewAction.showDesktop.rawValue,
+            actionIndex: 0,
+            bindingIndex: 0
+        )
+
+        XCTAssertEqual(model.draft.bindings[0].name, "显示桌面")
+    }
+
     func testInvalidDraftDoesNotSave() {
         var saveCount = 0
         let model = SettingsViewModel(configuration: AppConfiguration()) { _ in

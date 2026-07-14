@@ -48,35 +48,6 @@ final class AccessibilityWindowActionsTests: XCTestCase {
         }
     }
 
-    func testMultiWindowLayoutsPreserveFocusedWindowOrdering() throws {
-        let bounds = CGRect(x: 0, y: 0, width: 1_000, height: 600)
-        let left = CGRect(x: 0, y: 0, width: 500, height: 600)
-        let right = CGRect(x: 500, y: 0, width: 500, height: 600)
-        let top = CGRect(x: 0, y: 0, width: 1_000, height: 300)
-        let bottom = CGRect(x: 0, y: 300, width: 1_000, height: 300)
-        let topLeft = CGRect(x: 0, y: 0, width: 500, height: 300)
-        let topRight = CGRect(x: 500, y: 0, width: 500, height: 300)
-        let bottomLeft = CGRect(x: 0, y: 300, width: 500, height: 300)
-        let bottomRight = CGRect(x: 500, y: 300, width: 500, height: 300)
-
-        XCTAssertEqual(WindowLayoutCalculator.frames(for: .arrangeLeftRight, in: bounds), [left, right])
-        XCTAssertEqual(WindowLayoutCalculator.frames(for: .arrangeRightLeft, in: bounds), [right, left])
-        XCTAssertEqual(WindowLayoutCalculator.frames(for: .arrangeTopBottom, in: bounds), [top, bottom])
-        XCTAssertEqual(WindowLayoutCalculator.frames(for: .arrangeBottomTop, in: bounds), [bottom, top])
-        XCTAssertEqual(
-            WindowLayoutCalculator.frames(for: .arrangeFour, in: bounds),
-            [topLeft, topRight, bottomLeft, bottomRight]
-        )
-        XCTAssertEqual(
-            WindowLayoutCalculator.frames(for: .arrangeLeftAndQuarters, in: bounds),
-            [left, topRight, bottomRight]
-        )
-        XCTAssertEqual(
-            WindowLayoutCalculator.frames(for: .arrangeRightAndQuarters, in: bounds),
-            [right, topLeft, bottomLeft]
-        )
-    }
-
     func testNonLayoutActionsDoNotProduceLayoutFrames() {
         let bounds = CGRect(x: 0, y: 0, width: 800, height: 600)
         let nonLayoutActions: [WindowAction] = [

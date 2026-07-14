@@ -8,6 +8,12 @@ public enum KeyStrokeModifier: String, Codable, CaseIterable, Sendable {
 }
 
 public enum WindowAction: String, Codable, CaseIterable, Sendable {
+    public static let retiredRawValues: Set<String> = [
+        "arrangeLeftRight", "arrangeRightLeft", "arrangeTopBottom",
+        "arrangeBottomTop", "arrangeFour", "arrangeLeftAndQuarters",
+        "arrangeRightAndQuarters"
+    ]
+
     case center
     case maximize
     case fill
@@ -20,13 +26,6 @@ public enum WindowAction: String, Codable, CaseIterable, Sendable {
     case tileTopRight
     case tileBottomLeft
     case tileBottomRight
-    case arrangeLeftRight
-    case arrangeRightLeft
-    case arrangeTopBottom
-    case arrangeBottomTop
-    case arrangeFour
-    case arrangeLeftAndQuarters
-    case arrangeRightAndQuarters
     case minimize
     case close
     case closeAll

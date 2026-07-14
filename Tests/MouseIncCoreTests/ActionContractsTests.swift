@@ -106,6 +106,11 @@ final class ActionContractsTests: XCTestCase {
         }
     }
 
+    func testRetiredMultiWindowActionsAreNotSelectable() {
+        XCTAssertTrue(WindowAction.retiredRawValues.isDisjoint(with: WindowAction.allCases.map(\.rawValue)))
+        XCTAssertEqual(WindowAction.retiredRawValues.count, 7)
+    }
+
     func testCaptureActionsValidateKnownValues() {
         let valid = AppConfiguration(bindings: [
             GestureBinding(

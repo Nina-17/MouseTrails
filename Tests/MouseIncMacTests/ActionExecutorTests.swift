@@ -89,8 +89,11 @@ final class ActionExecutorTests: XCTestCase {
 
     func testSystemViewActionUsesInjectedHandler() async throws {
         var receivedAction: SystemViewAction?
+        var loggedEvents: [(DiagnosticEvent, [String: String])] = []
         let executor = ActionExecutor(
-            eventLogger: { _, _ in },
+            eventLogger: { event, metadata in
+                loggedEvents.append((event, metadata))
+            },
             systemViewActionHandler: { action in
                 receivedAction = action
                 return true
@@ -104,6 +107,30 @@ final class ActionExecutorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 20_000_000)
 
         XCTAssertEqual(receivedAction, .missionControl)
+        let invocation = try XCTUnwrap(loggedEvents.first { $0.0 == .actionInvoked })
+        XCTAssertEqual(invocation.1["type"], ActionDefinition.Kind.systemViewAction.rawValue)
+        XCTAssertEqual(invocation.1["value"], SystemViewAction.missionControl.rawValue)
+        XCTAssertEqual(invocation.1["accepted"], "true")
+        XCTAssertFalse(executor.isExecuting)
+    }
+
+    func testRejectedWindowActionLogsRawValueAndFailure() async throws {
+        var loggedEvents: [(DiagnosticEvent, [String: String])] = []
+        let executor = ActionExecutor(
+            eventLogger: { event, metadata in
+                loggedEvents.append((event, metadata))
+            },
+            windowActionHandler: { _ in false }
+        )
+
+        executor.execute([.init(type: .windowAction, value: WindowAction.tileLeft.rawValue)])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        let invocation = try XCTUnwrap(loggedEvents.first { $0.0 == .actionInvoked })
+        XCTAssertEqual(invocation.1["type"], ActionDefinition.Kind.windowAction.rawValue)
+        XCTAssertEqual(invocation.1["value"], WindowAction.tileLeft.rawValue)
+        XCTAssertEqual(invocation.1["accepted"], "false")
+        XCTAssertTrue(loggedEvents.contains { $0.0 == .actionFailed })
         XCTAssertFalse(executor.isExecuting)
     }
 

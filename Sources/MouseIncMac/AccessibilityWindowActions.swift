@@ -45,13 +45,6 @@ struct WindowLayoutCalculator {
         case .tileTopRight: return [.topRight]
         case .tileBottomLeft: return [.bottomLeft]
         case .tileBottomRight: return [.bottomRight]
-        case .arrangeLeftRight: return [.left, .right]
-        case .arrangeRightLeft: return [.right, .left]
-        case .arrangeTopBottom: return [.top, .bottom]
-        case .arrangeBottomTop: return [.bottom, .top]
-        case .arrangeFour: return [.topLeft, .topRight, .bottomLeft, .bottomRight]
-        case .arrangeLeftAndQuarters: return [.left, .topRight, .bottomRight]
-        case .arrangeRightAndQuarters: return [.right, .topLeft, .bottomLeft]
         default: return nil
         }
     }
@@ -89,8 +82,14 @@ struct WindowLayoutCalculator {
 @MainActor
 enum AccessibilityWindowActions {
     private struct WindowIdentity: Hashable {
+        enum Token: Hashable {
+            case windowNumber(Int)
+            case accessibilityIdentifier(String)
+            case elementHash(CFHashCode)
+        }
+
         let processIdentifier: pid_t
-        let elementHash: CFHashCode
+        let token: Token
     }
 
     private static var savedFrames: [WindowIdentity: CGRect] = [:]
@@ -103,10 +102,7 @@ enum AccessibilityWindowActions {
             return toggleFullScreen()
         case .fill,
              .tileLeft, .tileRight, .tileTop, .tileBottom,
-             .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight,
-             .arrangeLeftRight, .arrangeRightLeft,
-             .arrangeTopBottom, .arrangeBottomTop, .arrangeFour,
-             .arrangeLeftAndQuarters, .arrangeRightAndQuarters:
+             .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight:
             return applyLayout(action)
         case .restorePreviousSize:
             return restorePreviousFrame()
@@ -211,15 +207,8 @@ enum AccessibilityWindowActions {
             let targetFrames = WindowLayoutCalculator.frames(for: action, in: visibleBounds)
         else { return false }
 
-        let windows: [AXUIElement]
-        if targetFrames.count == 1 {
-            windows = [focusedWindow]
-        } else {
-            guard let candidates = manageableWindows(focusedFirst: focusedWindow),
-                  candidates.count >= targetFrames.count else { return false }
-            windows = Array(candidates.prefix(targetFrames.count))
-        }
-        return applyFrames(targetFrames, to: windows)
+        guard targetFrames.count == 1 else { return false }
+        return applyFrames(targetFrames, to: [focusedWindow])
     }
 
     private static func restorePreviousFrame() -> Bool {
@@ -234,11 +223,22 @@ enum AccessibilityWindowActions {
         guard targets.count == windows.count else { return false }
         let originals = windows.compactMap(frame(of:))
         guard originals.count == windows.count else { return false }
+        let minimizedStates = windows.map {
+            booleanAttribute(kAXMinimizedAttribute, from: $0) ?? false
+        }
+
+        for (index, window) in windows.enumerated() where minimizedStates[index] {
+            guard setBooleanAttribute(kAXMinimizedAttribute, value: false, on: window) else {
+                restoreMinimizedStates(minimizedStates, windows: windows, through: index)
+                return false
+            }
+        }
 
         var newlySaved: [WindowIdentity] = []
         for (window, original) in zip(windows, originals) {
             guard let identity = identity(for: window) else {
                 newlySaved.forEach { savedFrames.removeValue(forKey: $0) }
+                restoreMinimizedStates(minimizedStates, windows: windows)
                 return false
             }
             if savedFrames[identity] == nil {
@@ -253,61 +253,28 @@ enum AccessibilityWindowActions {
                     _ = setFrame(originals[rollbackIndex], for: windows[rollbackIndex])
                 }
                 newlySaved.forEach { savedFrames.removeValue(forKey: $0) }
+                restoreMinimizedStates(minimizedStates, windows: windows)
                 return false
             }
         }
         return true
     }
 
-    private static func manageableWindows(focusedFirst focused: AXUIElement) -> [AXUIElement]? {
-        guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
-        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
-        var value: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                applicationElement,
-                kAXWindowsAttribute as CFString,
-                &value
-            ) == .success,
-            let allWindows = value as? [AXUIElement]
-        else { return nil }
-
-        var result = [focused]
-        for window in allWindows where !CFEqual(window, focused) {
-            guard isManageable(window) else { continue }
-            result.append(window)
-        }
-        return result
-    }
-
-    private static func isManageable(_ window: AXUIElement) -> Bool {
-        guard stringAttribute(kAXRoleAttribute, from: window) == kAXWindowRole else { return false }
-        if let minimized = booleanAttribute(kAXMinimizedAttribute, from: window), minimized {
-            return false
-        }
-        var positionSettable = DarwinBoolean(false)
-        var sizeSettable = DarwinBoolean(false)
-        guard
-            AXUIElementIsAttributeSettable(
-                window,
-                kAXPositionAttribute as CFString,
-                &positionSettable
-            ) == .success,
-            AXUIElementIsAttributeSettable(
-                window,
-                kAXSizeAttribute as CFString,
-                &sizeSettable
-            ) == .success
-        else { return false }
-        return positionSettable.boolValue && sizeSettable.boolValue
-    }
-
     private static func identity(for window: AXUIElement) -> WindowIdentity? {
         var processIdentifier: pid_t = 0
         guard AXUIElementGetPid(window, &processIdentifier) == .success else { return nil }
+        let token: WindowIdentity.Token
+        if let windowNumber = numberAttribute("AXWindowNumber", from: window)?.intValue {
+            token = .windowNumber(windowNumber)
+        } else if let identifier = stringAttribute(kAXIdentifierAttribute, from: window),
+                  !identifier.isEmpty {
+            token = .accessibilityIdentifier(identifier)
+        } else {
+            token = .elementHash(CFHash(window))
+        }
         return WindowIdentity(
             processIdentifier: processIdentifier,
-            elementHash: CFHash(window)
+            token: token
         )
     }
 
@@ -341,6 +308,18 @@ enum AccessibilityWindowActions {
         return true
     }
 
+    private static func restoreMinimizedStates(
+        _ states: [Bool],
+        windows: [AXUIElement],
+        through lastIndex: Int? = nil
+    ) {
+        let upperBound = min(lastIndex ?? (windows.count - 1), windows.count - 1)
+        guard upperBound >= 0 else { return }
+        for index in 0 ... upperBound where states[index] {
+            _ = setBooleanAttribute(kAXMinimizedAttribute, value: true, on: windows[index])
+        }
+    }
+
     private static func stringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
@@ -355,6 +334,26 @@ enum AccessibilityWindowActions {
             return nil
         }
         return value as? Bool
+    }
+
+    private static func numberAttribute(_ attribute: String, from element: AXUIElement) -> NSNumber? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else {
+            return nil
+        }
+        return value as? NSNumber
+    }
+
+    private static func setBooleanAttribute(
+        _ attribute: String,
+        value: Bool,
+        on element: AXUIElement
+    ) -> Bool {
+        AXUIElementSetAttributeValue(
+            element,
+            attribute as CFString,
+            value as CFBoolean
+        ) == .success
     }
 
     private static func focusedWindow() -> AXUIElement? {

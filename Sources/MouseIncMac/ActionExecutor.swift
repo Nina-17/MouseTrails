@@ -126,10 +126,14 @@ final class ActionExecutor {
             return false
         case .windowAction:
             guard let windowAction = WindowAction(rawValue: action.value) else { return false }
-            return windowActionHandler(windowAction)
+            let succeeded = windowActionHandler(windowAction)
+            logInvokedAction(type: action.type, value: windowAction.rawValue, succeeded: succeeded)
+            return succeeded
         case .systemViewAction:
             guard let systemAction = SystemViewAction(rawValue: action.value) else { return false }
-            return systemViewActionHandler(systemAction)
+            let succeeded = systemViewActionHandler(systemAction)
+            logInvokedAction(type: action.type, value: systemAction.rawValue, succeeded: succeeded)
+            return succeeded
         case .captureAction:
             guard let captureAction = CaptureAction(rawValue: action.value) else { return false }
             return captureActionHandler(captureAction, context.gestureBounds)
@@ -214,6 +218,21 @@ final class ActionExecutor {
             [
                 "index": String(index),
                 "type": action.type.rawValue
+            ]
+        )
+    }
+
+    private func logInvokedAction(
+        type: ActionDefinition.Kind,
+        value: String,
+        succeeded: Bool
+    ) {
+        eventLogger(
+            .actionInvoked,
+            [
+                "type": type.rawValue,
+                "value": value,
+                "accepted": String(succeeded)
             ]
         )
     }

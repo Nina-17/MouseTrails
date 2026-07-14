@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 6
+    public static let currentSchemaVersion = 7
 
     public let schemaVersion: Int
     public var gestureOptions: GestureOptions
@@ -180,6 +180,31 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
             where bindings[bindingIndex].actions[actionIndex].type == .windowAction
                 && bindings[bindingIndex].actions[actionIndex].value == "restore" {
                 bindings[bindingIndex].actions[actionIndex].value = WindowAction.maximize.rawValue
+            }
+        }
+        if storedVersion < 7 {
+            let gesturesOwningRetiredActions = Set(bindings.compactMap { binding in
+                binding.actions.contains {
+                    $0.type == .windowAction
+                        && WindowAction.retiredRawValues.contains($0.value)
+                } ? binding.gesture.uppercased() : nil
+            })
+            bindings = bindings.compactMap { sourceBinding in
+                var binding = sourceBinding
+                let containedRetiredAction = binding.actions.contains {
+                    $0.type == .windowAction
+                        && WindowAction.retiredRawValues.contains($0.value)
+                }
+                binding.actions.removeAll {
+                    $0.type == .windowAction
+                        && WindowAction.retiredRawValues.contains($0.value)
+                }
+                return containedRetiredAction && binding.actions.isEmpty ? nil : binding
+            }
+            let referencedGestures = Set(bindings.map { $0.gesture.uppercased() })
+            customGestures.removeAll {
+                gesturesOwningRetiredActions.contains($0.identifier.uppercased())
+                    && !referencedGestures.contains($0.identifier.uppercased())
             }
         }
     }

@@ -216,7 +216,7 @@ struct SettingsView: View {
     }
 
     private var edgeScrollSection: some View {
-        Section("边缘滚轮（简化版）") {
+        Section("边缘滚轮") {
             Toggle("启用左亮度、右音量", isOn: $model.draft.edgeScrollOptions.enabled)
             numberField("边缘宽度（点）", value: $model.draft.edgeScrollOptions.inset)
             numberField("每次调节比例", value: $model.draft.edgeScrollOptions.step)
@@ -807,13 +807,6 @@ struct SettingsView: View {
         case .tileTopRight: return "右上四分之一"
         case .tileBottomLeft: return "左下四分之一"
         case .tileBottomRight: return "右下四分之一"
-        case .arrangeLeftRight: return "两个窗口：左侧与右侧"
-        case .arrangeRightLeft: return "两个窗口：右侧与左侧"
-        case .arrangeTopBottom: return "两个窗口：顶部与底部"
-        case .arrangeBottomTop: return "两个窗口：底部与顶部"
-        case .arrangeFour: return "四个窗口：四等分"
-        case .arrangeLeftAndQuarters: return "三个窗口：左侧与右侧上下"
-        case .arrangeRightAndQuarters: return "三个窗口：右侧与左侧上下"
         case .minimize: return "最小化窗口"
         case .close: return "关闭窗口"
         case .closeAll: return "关闭所有类似窗口"

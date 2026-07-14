@@ -14,6 +14,19 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertTrue(configuration.validate().isValid)
     }
 
+    func testSchemaSixRemovesRetiredMultiWindowActionsAndOrphanedGesture() throws {
+        let data = Data(
+            #"{"schemaVersion":6,"gestureOptions":{},"customGestures":[{"identifier":"CUSTOM_OLD","name":"Old","samples":[[{"x":0,"y":0},{"x":1,"y":1}],[{"x":0,"y":0},{"x":1,"y":1}],[{"x":0,"y":0},{"x":1,"y":1}]]}],"bindings":[{"gesture":"CUSTOM_OLD","name":"旧多窗口","bundleIdentifiers":[],"actions":[{"type":"windowAction","value":"arrangeLeftRight"}]},{"gesture":"UP","name":"保留","bundleIdentifiers":[],"actions":[{"type":"windowAction","value":"fill"}]}]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
+        XCTAssertEqual(configuration.bindings.map(\.name), ["保留"])
+        XCTAssertTrue(configuration.customGestures.isEmpty)
+        XCTAssertTrue(configuration.validate().isValid)
+    }
+
     func testDefaultsAreSafeAndPreserveExistingBehavior() {
         let configuration = AppConfiguration()
 
