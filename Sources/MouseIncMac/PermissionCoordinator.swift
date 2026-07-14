@@ -3,6 +3,10 @@ import CoreGraphics
 import MouseIncCore
 
 enum PermissionCoordinator {
+    static let trackpadSettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.Trackpad-Settings.extension"
+    )
+
     static var snapshot: PermissionSnapshot {
         PermissionSnapshot(
             states: [
@@ -30,6 +34,13 @@ enum PermissionCoordinator {
     static func openSystemSettings(for permission: SystemPermission) -> Bool {
         guard let url = systemSettingsURL(for: permission) else { return false }
         return NSWorkspace.shared.open(url)
+    }
+
+    @MainActor
+    @discardableResult
+    static func openTrackpadSettings() -> Bool {
+        guard let trackpadSettingsURL else { return false }
+        return NSWorkspace.shared.open(trackpadSettingsURL)
     }
 
     static func displayName(for permission: SystemPermission) -> String {

@@ -884,6 +884,26 @@ private struct TutorialView: View {
             }
             .padding(18)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            HStack(spacing: 14) {
+                Image(systemName: "rectangle.and.hand.point.up.left.fill")
+                    .font(.title2)
+                    .foregroundStyle(.tint)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("经常使用触控板？")
+                        .font(.headline)
+                    Text("建议把触控板的按压力度调整为“轻”，以更轻松地使用 MouseTrails。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("前往设置") {
+                    PermissionCoordinator.openTrackpadSettings()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            .padding(16)
+            .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
         }
     }
 

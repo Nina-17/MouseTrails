@@ -18,6 +18,13 @@ final class PermissionCoordinatorTests: XCTestCase {
         )
     }
 
+    func testTrackpadSettingsURLUsesSystemSettingsExtension() {
+        XCTAssertEqual(
+            PermissionCoordinator.trackpadSettingsURL?.absoluteString,
+            "x-apple.systempreferences:com.apple.Trackpad-Settings.extension"
+        )
+    }
+
     func testPermissionDisplayNamesAreUserFacing() {
         XCTAssertEqual(PermissionCoordinator.displayName(for: .accessibility), "辅助功能")
         XCTAssertEqual(PermissionCoordinator.displayName(for: .screenRecording), "屏幕录制")
