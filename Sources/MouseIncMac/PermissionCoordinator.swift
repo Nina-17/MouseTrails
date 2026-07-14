@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import MouseIncCore
 
@@ -10,5 +11,35 @@ enum PermissionCoordinator {
                 .inputMonitoring: CGPreflightListenEventAccess() ? .granted : .denied
             ]
         )
+    }
+
+    static func systemSettingsURL(for permission: SystemPermission) -> URL? {
+        let anchor: String
+        switch permission {
+        case .accessibility:
+            anchor = "Privacy_Accessibility"
+        case .screenRecording:
+            anchor = "Privacy_ScreenCapture"
+        case .inputMonitoring:
+            anchor = "Privacy_ListenEvent"
+        }
+        return URL(
+            string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
+        )
+    }
+
+    @MainActor
+    @discardableResult
+    static func openSystemSettings(for permission: SystemPermission) -> Bool {
+        guard let url = systemSettingsURL(for: permission) else { return false }
+        return NSWorkspace.shared.open(url)
+    }
+
+    static func displayName(for permission: SystemPermission) -> String {
+        switch permission {
+        case .accessibility: return "辅助功能"
+        case .screenRecording: return "屏幕录制"
+        case .inputMonitoring: return "输入监控"
+        }
     }
 }

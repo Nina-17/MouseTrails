@@ -7,6 +7,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let model: SettingsViewModel
     private let navigation = SettingsNavigation()
     private let launchAtLogin: LaunchAtLoginController
+    private let permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator
     private let closeHandler: @MainActor () -> Void
 
     init(
@@ -17,10 +18,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration,
         launchAtLogin: LaunchAtLoginController,
         updateCoordinator: UpdateCoordinator,
+        permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator,
         closeHandler: @escaping @MainActor () -> Void = {}
     ) {
         self.closeHandler = closeHandler
         self.launchAtLogin = launchAtLogin
+        self.permissionAuthorizationCoordinator = permissionAuthorizationCoordinator
         model = SettingsViewModel(
             configuration: configuration,
             customGestureRecorder: customGestureRecorder,
@@ -33,7 +36,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 model: model,
                 navigation: navigation,
                 launchAtLogin: launchAtLogin,
-                updateCoordinator: updateCoordinator
+                updateCoordinator: updateCoordinator,
+                permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
             )
         )
         let window = NSWindow(contentViewController: hostingController)
@@ -59,6 +63,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
         model.reload(configuration)
         launchAtLogin.refresh()
+        permissionAuthorizationCoordinator.refresh()
         showWindow(nil)
         window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)

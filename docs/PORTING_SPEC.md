@@ -30,7 +30,7 @@
 | OCR | Vision `VNRecognizeTextRequest` | 屏幕录制 | P2B | 低；可完全离线 |
 | 高质量窗口截图 | ScreenCaptureKit | 屏幕录制 | P2B | 中：阴影和透明背景 |
 | 按键回显 | `CGEventTap` + 浮层 | 输入监控/辅助功能 | P2B | 中：密码输入保护 |
-| SwiftUI 设置页 | 配置编辑、手势映射与权限诊断 | 无 | P2B | 中：与配置 schema 同步 |
+| SwiftUI 设置页 | 配置编辑、手势映射、权限诊断、定向跳转与可拖拽授权助手 | 无 | P2B | 中：与配置 schema 同步 |
 | 音量/静音 | CoreAudio 或系统快捷键事件 | 辅助功能 | P2A | 中 |
 | 屏幕亮度 | 显示器私有/受限 API，外接屏需 DDC | 可能额外授权 | P3 | 高 |
 | 启动应用/URL | `NSWorkspace` | 无 | P2A | 低 |

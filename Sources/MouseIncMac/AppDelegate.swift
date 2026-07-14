@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchAtLogin = LaunchAtLoginController()
     private let customGestureRecorder = CustomGestureRecordingController()
     private let updateCoordinator = UpdateCoordinator()
+    private let permissionAuthorizationCoordinator = PermissionAuthorizationCoordinator()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
@@ -22,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         updateCoordinator.onStateChange = { [weak self] in
             self?.updateUpdateMenuItem()
+        }
+        permissionAuthorizationCoordinator.onSnapshotChange = { [weak self] _ in
+            self?.updatePermissionMenus()
         }
         launchAtLogin.onStateChange = { [weak self] _ in
             self?.updateLaunchAtLoginMenuItem()
@@ -418,6 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 launchAtLogin: launchAtLogin,
                 updateCoordinator: updateCoordinator,
+                permissionAuthorizationCoordinator: permissionAuthorizationCoordinator,
                 closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }

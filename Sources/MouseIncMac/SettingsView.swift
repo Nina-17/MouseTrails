@@ -9,6 +9,7 @@ struct SettingsView: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject var launchAtLogin: LaunchAtLoginController
     @ObservedObject var updateCoordinator: UpdateCoordinator
+    @ObservedObject var permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator
     @State private var selectedBindingID: UUID?
 
     var body: some View {
@@ -543,16 +544,23 @@ struct SettingsView: View {
     }
 
     private var permissionSection: some View {
-        let snapshot = PermissionCoordinator.snapshot
         return Section("权限") {
-            permissionRow("辅助功能", state: snapshot[.accessibility], required: true)
+            permissionRow(.accessibility, required: true)
             permissionRow(
-                "屏幕录制",
-                state: snapshot[.screenRecording],
+                .screenRecording,
                 required: model.draft.requiredPermissions.contains(.screenRecording)
             )
-            permissionRow("输入监控", state: snapshot[.inputMonitoring], required: false)
+            permissionRow(.inputMonitoring, required: false)
+            HStack {
+                Spacer()
+                Button("重新检测权限") {
+                    permissionAuthorizationCoordinator.refresh()
+                }
+            }
             Text("截图、贴图与 OCR 首次使用时才请求屏幕录制权限；拒绝不会影响手势和窗口动作。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("点击未授权项会打开对应的系统设置，并显示可拖入权限列表的 MouseTrails 应用图标。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -590,17 +598,36 @@ struct SettingsView: View {
         }
     }
 
-    private func permissionRow(_ name: String, state: PermissionState, required: Bool) -> some View {
-        HStack {
-            Text(name)
+    @ViewBuilder
+    private func permissionRow(_ permission: SystemPermission, required: Bool) -> some View {
+        let state = permissionAuthorizationCoordinator.snapshot[permission]
+        let row = HStack {
+            Text(PermissionCoordinator.displayName(for: permission))
             Spacer()
             Text(permissionStateName(state, required: required))
-                .foregroundStyle(state == .granted ? Color.green : (required ? Color.red : Color.secondary))
+                .foregroundStyle(
+                    state == .granted ? Color.green : (required ? Color.red : Color.secondary)
+                )
+            if state != .granted {
+                Image(systemName: "arrow.up.right.square")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        if state == .granted {
+            row
+        } else {
+            Button {
+                permissionAuthorizationCoordinator.beginAuthorization(for: permission)
+            } label: {
+                row
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
     private func permissionStateName(_ state: PermissionState, required: Bool) -> String {
-        if !required, state != .granted { return "当前未使用" }
+        if !required, state != .granted { return "未授权（可选）" }
         switch state {
         case .granted: return "已授权"
         case .denied: return "未授权"
