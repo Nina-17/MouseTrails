@@ -1,0 +1,56 @@
+name: Release DMG
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          if [[ "v${version}" != "${GITHUB_REF_NAME}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match Info.plist version ${version}" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: swift test
+
+      - name: Run core checks
+        run: swift run MouseIncCoreCheck
+
+      - name: Build DMG
+        run: ./scripts/create-dmg.sh
+
+      - name: Create checksum
+        shell: bash
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          cd dist
+          shasum -a 256 "MouseTrails-${version}.dmg" > "MouseTrails-${version}.dmg.sha256"
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          gh release create "${GITHUB_REF_NAME}" \
+            "dist/MouseTrails-${version}.dmg" \
+            "dist/MouseTrails-${version}.dmg.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "MouseTrails ${version}"

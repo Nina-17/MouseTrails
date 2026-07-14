@@ -7,16 +7,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let captureCoordinator = CaptureCoordinator()
     private let launchAtLogin = LaunchAtLoginController()
     private let customGestureRecorder = CustomGestureRecordingController()
+    private let updateCoordinator = UpdateCoordinator()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
     private var launchAtLoginItem: NSMenuItem?
     private var permissionItem: NSMenuItem?
     private var lastGestureItem: NSMenuItem?
+    private var updateItem: NSMenuItem?
+    private var mainMenuUpdateItem: NSMenuItem?
     private var monitor: GestureMonitor?
     private var settingsWindowController: SettingsWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        updateCoordinator.onStateChange = { [weak self] in
+            self?.updateUpdateMenuItem()
+        }
         launchAtLogin.onStateChange = { [weak self] _ in
             self?.updateLaunchAtLoginMenuItem()
         }
@@ -62,10 +68,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AccessibilityPermission.request()
             updatePermissionMenus()
         }
+        updateCoordinator.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         monitor?.stop()
+        updateCoordinator.stop()
     }
 
     func applicationShouldHandleReopen(
@@ -147,6 +155,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnosticsItem.target = self
         menu.addItem(diagnosticsItem)
 
+        let updateItem = NSMenuItem(
+            title: updateCoordinator.menuTitle,
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        menu.addItem(updateItem)
+
         let settingsItem = NSMenuItem(
             title: "打开设置…",
             action: #selector(openSettings),
@@ -163,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.launchAtLoginItem = launchAtLoginItem
         self.permissionItem = permissionItem
         self.lastGestureItem = lastGestureItem
+        self.updateItem = updateItem
         updateLaunchAtLoginMenuItem()
         updatePermissionMenus()
     }
@@ -177,6 +194,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
             keyEquivalent: ""
         )
+        let updateItem = NSMenuItem(
+            title: "检查更新…",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updateItem.target = self
+        applicationMenu.addItem(updateItem)
+        mainMenuUpdateItem = updateItem
         applicationMenu.addItem(.separator())
         let settingsItem = NSMenuItem(
             title: "设置…",
@@ -269,6 +294,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateLaunchAtLoginMenuItem() {
         launchAtLoginItem?.state = .off
         launchAtLoginItem?.image = launchAtLogin.isEnabled ? statusCheckmarkImage() : nil
+    }
+
+    private func updateUpdateMenuItem() {
+        updateItem?.title = updateCoordinator.menuTitle
+        updateItem?.isEnabled = !updateCoordinator.isBusy
+        mainMenuUpdateItem?.title = updateCoordinator.menuTitle
+        mainMenuUpdateItem?.isEnabled = !updateCoordinator.isBusy
     }
 
     private func loadConfiguration() {
@@ -385,6 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return configuration
                 },
                 launchAtLogin: launchAtLogin,
+                updateCoordinator: updateCoordinator,
                 closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }
@@ -402,6 +435,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openDiagnostics() {
         NSWorkspace.shared.open(DiagnosticLogger.shared.fileURL)
+    }
+
+    @objc private func checkForUpdates() {
+        updateCoordinator.checkForUpdates(manual: true)
     }
 
     private func presentError(title: String, message: String) {

@@ -24,7 +24,10 @@ if command -v codesign >/dev/null 2>&1; then
         | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' \
         | head -n 1)
     if [ -n "$IDENTITY" ]; then
-        codesign --force --deep --options runtime --sign "$IDENTITY" "$APP"
+        if ! codesign --force --deep --options runtime --sign "$IDENTITY" "$APP"; then
+            echo "Apple Development signing failed; falling back to ad-hoc signing." >&2
+            codesign --force --deep --sign - "$APP"
+        fi
     else
         codesign --force --deep --sign - "$APP"
     fi

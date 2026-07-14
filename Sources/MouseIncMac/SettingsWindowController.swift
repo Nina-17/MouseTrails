@@ -16,6 +16,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         exportHandler: @escaping @MainActor (AppConfiguration, URL) throws -> Void,
         restoreHandler: @escaping @MainActor (URL) throws -> AppConfiguration,
         launchAtLogin: LaunchAtLoginController,
+        updateCoordinator: UpdateCoordinator,
         closeHandler: @escaping @MainActor () -> Void = {}
     ) {
         self.closeHandler = closeHandler
@@ -31,7 +32,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             rootView: SettingsView(
                 model: model,
                 navigation: navigation,
-                launchAtLogin: launchAtLogin
+                launchAtLogin: launchAtLogin,
+                updateCoordinator: updateCoordinator
             )
         )
         let window = NSWindow(contentViewController: hostingController)

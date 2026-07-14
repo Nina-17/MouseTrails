@@ -8,6 +8,7 @@ struct SettingsView: View {
     @ObservedObject var model: SettingsViewModel
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject var launchAtLogin: LaunchAtLoginController
+    @ObservedObject var updateCoordinator: UpdateCoordinator
     @State private var selectedBindingID: UUID?
 
     var body: some View {
@@ -60,6 +61,7 @@ struct SettingsView: View {
         case .general:
             Form {
                 gestureSection
+                updateSection
                 sequenceSection
             }
             .formStyle(.grouped)
@@ -145,6 +147,32 @@ struct SettingsView: View {
                 Text("继续执行").tag(ActionSequenceOptions.FailurePolicy.continueSequence)
             }
             numberField("最大延时（秒）", value: $model.draft.actionSequenceOptions.maximumDelay)
+        }
+    }
+
+    private var updateSection: some View {
+        Section("软件更新") {
+            Toggle(
+                "自动检查更新",
+                isOn: $updateCoordinator.automaticallyChecksForUpdates
+            )
+            LabeledContent("当前版本", value: updateCoordinator.currentVersionString)
+            HStack {
+                Text(updateCoordinator.statusText)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if updateCoordinator.isBusy {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Button("检查更新…") {
+                    updateCoordinator.checkForUpdates(manual: true)
+                }
+                .disabled(updateCoordinator.isBusy)
+            }
+            Text("每 24 小时最多自动检查一次。新版本来自公开 GitHub Releases，下载后由 macOS 打开 DMG，不会静默替换应用。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -851,7 +879,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .general: return "手势识别、轨迹外观和动作序列"
+        case .general: return "手势识别、轨迹外观、动作序列和软件更新"
         case .bindings: return "管理轨迹、应用范围和执行动作"
         case .edgeScroll: return "左侧亮度与右侧音量控制"
         case .permissions: return "查看辅助功能、屏幕录制和输入监控状态"
