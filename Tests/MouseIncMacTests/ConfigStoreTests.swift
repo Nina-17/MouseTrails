@@ -34,8 +34,8 @@ final class ConfigStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(configuration, expected)
-        XCTAssertEqual(configuration.bindings.count, 13)
-        XCTAssertEqual(configuration.customGestures.count, 1)
+        XCTAssertEqual(configuration.bindings.count, 12)
+        XCTAssertTrue(configuration.customGestures.isEmpty)
         XCTAssertTrue(configuration.edgeScrollOptions.enabled)
         XCTAssertEqual(configuration.gestureOptions.trailColor.green, 0.9399358630180359)
     }
