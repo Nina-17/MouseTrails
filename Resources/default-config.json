@@ -125,17 +125,6 @@
       "bundleIdentifiers": [],
       "gesture": "DOWN-LEFT",
       "name": "关闭所有类似窗口"
-    },
-    {
-      "actions": [
-        {
-          "type": "windowAction",
-          "value": "quitApplication"
-        }
-      ],
-      "bundleIdentifiers": [],
-      "gesture": "UP-LEFT",
-      "name": "退出当前应用"
     }
   ],
   "customGestures": [],

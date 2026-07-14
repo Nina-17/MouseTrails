@@ -2,10 +2,17 @@ import AppKit
 import MouseIncCore
 import SwiftUI
 
+enum TutorialGestureDecision: Equatable {
+    case notHandled
+    case consume
+    case execute
+}
+
 enum TutorialPage: Int, CaseIterable, Identifiable {
     case welcome
-    case defaultGestures
-    case windowGestures
+    case editing
+    case browsing
+    case windows
     case pinnedImage
     case ocr
     case finish
@@ -15,39 +22,76 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .welcome: return "欢迎使用 MouseTrails"
-        case .defaultGestures: return "常用默认手势"
-        case .windowGestures: return "窗口默认手势"
+        case .editing: return "复制与粘贴"
+        case .browsing: return "浏览与搜索"
+        case .windows: return "窗口操作"
         case .pinnedImage: return "贴图"
         case .ocr: return "离线 OCR"
-        case .finish: return "准备完成"
+        case .finish: return "体验完成"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .welcome: return "先了解绘制方式和必要权限"
-        case .defaultGestures: return "复制、粘贴、前进、后退和搜索"
-        case .windowGestures: return "安全练习窗口与应用操作"
-        case .pinnedImage: return "用顺时针方框截取并悬浮图像"
-        case .ocr: return "用逆时针方框识别并复制文字"
-        case .finish: return "以后可随时从通用设置重新查看"
+        case .welcome: return "授权后，通过真实任务熟悉 MouseTrails"
+        case .editing: return "用手势完成一次真实的复制与粘贴"
+        case .browsing: return "在示例页面中前进、后退并实际搜索"
+        case .windows: return "只操作教程创建的临时窗口"
+        case .pinnedImage: return "生成贴图并亲手完成全部常用操作"
+        case .ocr: return "圈选文字、识别并复制真实结果"
+        case .finish: return "MouseTrails 已准备就绪"
         }
     }
+}
 
-    var gestureIdentifiers: [String] {
+private enum TutorialStep: Equatable {
+    case welcome
+    case copy
+    case paste
+    case back
+    case forward
+    case search
+    case closeWindow
+    case enterFullScreen
+    case exitFullScreen
+    case minimize
+    case closeAll
+    case createPin
+    case dragPin
+    case collapsePin
+    case expandPin
+    case adjustPinOpacity
+    case copyPin
+    case closePin
+    case recognizeText
+    case finish
+
+    var gestureIdentifier: String? {
         switch self {
-        case .defaultGestures:
-            return ["UP", "DOWN", "LEFT", "RIGHT", "LETTER_S"]
-        case .windowGestures:
-            return ["DOWN-RIGHT", "UP_RIGHT", "DOWN_LEFT", "DOWN-LEFT", "UP-LEFT"]
-        case .pinnedImage:
-            return ["SQUARE_CLOCKWISE"]
-        case .ocr:
-            return ["SQUARE_COUNTERCLOCKWISE"]
-        case .welcome, .finish:
-            return []
+        case .copy: return "UP"
+        case .paste: return "DOWN"
+        case .back: return "LEFT"
+        case .forward: return "RIGHT"
+        case .search: return "LETTER_S"
+        case .closeWindow: return "DOWN-RIGHT"
+        case .enterFullScreen, .exitFullScreen: return "UP_RIGHT"
+        case .minimize: return "DOWN_LEFT"
+        case .closeAll: return "DOWN-LEFT"
+        case .createPin: return "SQUARE_CLOCKWISE"
+        case .recognizeText: return "SQUARE_COUNTERCLOCKWISE"
+        default: return nil
         }
     }
+}
+
+enum PinnedImageInteractionEvent: Equatable {
+    case created
+    case moved
+    case collapsed
+    case expanded
+    case opacityAdjusted
+    case copied
+    case closed
 }
 
 @MainActor
@@ -56,21 +100,46 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         static let completedVersion = "tutorial.completedVersion"
     }
 
-    static let currentTutorialVersion = 1
+    static let currentTutorialVersion = 2
+    static let editingSentence = "MouseTrails 让每一次手势都更自然。"
+    static let searchPhrase = "MouseTrails macOS 手势工具"
+    static let ocrSample = "MouseTrails 教程识别成功"
 
     @Published private(set) var page: TutorialPage = .welcome
-    @Published private(set) var selectedIdentifier: String?
-    @Published private(set) var practicedIdentifiers: Set<String> = []
     @Published private(set) var feedback: String?
     @Published private(set) var isPresenting = false
     @Published private(set) var successEventID: UUID?
+    @Published private(set) var pasteText = ""
+    @Published private(set) var browserPageIndex = 1
+    @Published private(set) var recognizedText: String?
+    @Published private(set) var completedGestureCount = 0
+    @Published private(set) var copySelectionToken = UUID()
+    @Published private(set) var pasteFocusToken = UUID()
+    @Published private(set) var searchSelectionToken = UUID()
 
     var onClose: (@MainActor () -> Void)?
+    var dismissPinnedImage: (@MainActor (UUID) -> Void)?
 
     private let defaults: UserDefaults
+    private let injectedTutorialConfiguration: AppConfiguration?
+    private let allowsHeadlessInteraction: Bool
+    private var tutorialConfiguration = AppConfiguration()
+    private var step: TutorialStep = .welcome
+    private var transitionTask: Task<Void, Never>?
+    private var demoControllers: [TutorialDemoWindowController] = []
+    private var tutorialPinnedImageID: UUID?
+    private var isCleaningUp = false
+    private var waitingForSearchReturn = false
+    private var pasteboardChangeBeforeAction = 0
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        tutorialConfiguration: AppConfiguration? = nil,
+        allowsHeadlessInteraction: Bool = false
+    ) {
         self.defaults = defaults
+        injectedTutorialConfiguration = tutorialConfiguration
+        self.allowsHeadlessInteraction = allowsHeadlessInteraction
         super.init(window: nil)
     }
 
@@ -79,27 +148,46 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         fatalError("init(coder:) has not been implemented")
     }
 
+    deinit {
+        transitionTask?.cancel()
+    }
+
     var shouldPresentOnLaunch: Bool {
         defaults.integer(forKey: DefaultsKey.completedVersion) < Self.currentTutorialVersion
     }
 
+    var configurationForCurrentContext: AppConfiguration? {
+        guard isPresenting, !waitingForSearchReturn else { return nil }
+        if allowsHeadlessInteraction { return tutorialConfiguration }
+        guard
+              NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier,
+              let keyWindow = NSApplication.shared.keyWindow,
+              ownsTutorialWindow(keyWindow) else { return nil }
+        return tutorialConfiguration
+    }
+
+    var expectedGestureIdentifier: String? { step.gestureIdentifier }
+
     func begin() {
+        transitionTask?.cancel()
+        cleanupTransientWindows()
+        tutorialConfiguration = makeTutorialConfiguration()
         page = .welcome
-        selectedIdentifier = nil
-        practicedIdentifiers = []
+        step = .welcome
         feedback = nil
         successEventID = nil
+        pasteText = ""
+        browserPageIndex = 1
+        recognizedText = nil
+        completedGestureCount = 0
+        waitingForSearchReturn = false
         isPresenting = true
     }
 
-    func show(
-        configuration: AppConfiguration,
-        permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator
-    ) {
+    func show(permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator) {
         begin()
         let rootView = TutorialView(
             coordinator: self,
-            configuration: configuration,
             permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
         )
         if window == nil {
@@ -121,45 +209,159 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    func selectGesture(_ identifier: String) {
-        guard page.gestureIdentifiers.contains(identifier) else { return }
-        selectedIdentifier = identifier
-        feedback = practicedIdentifiers.contains(identifier)
-            ? "已完成这项练习，可以再次绘制"
-            : "按住右键并绘制目标轨迹"
+    func nextFromWelcome() {
+        move(to: .editing)
     }
 
-    func next() {
-        guard let index = TutorialPage.allCases.firstIndex(of: page),
-              index < TutorialPage.allCases.count - 1 else { return }
-        move(to: TutorialPage.allCases[index + 1])
+    func skipCurrentScene() {
+        switch page {
+        case .welcome: move(to: .editing)
+        case .editing: move(to: .browsing)
+        case .browsing: move(to: .windows)
+        case .windows: move(to: .pinnedImage)
+        case .pinnedImage: move(to: .ocr)
+        case .ocr: move(to: .finish)
+        case .finish: break
+        }
     }
 
-    func previous() {
-        guard let index = TutorialPage.allCases.firstIndex(of: page), index > 0 else { return }
-        move(to: TutorialPage.allCases[index - 1])
+    func previousScene() {
+        switch page {
+        case .welcome: break
+        case .editing: move(to: .welcome)
+        case .browsing: move(to: .editing)
+        case .windows: move(to: .browsing)
+        case .pinnedImage: move(to: .windows)
+        case .ocr: move(to: .pinnedImage)
+        case .finish: move(to: .ocr)
+        }
+    }
+
+    func updatePastedText(_ value: String) {
+        pasteText = value
+        guard step == .paste, value == Self.editingSentence else { return }
+        emitSuccess("粘贴成功")
+        scheduleMove(to: .browsing)
     }
 
     @discardableResult
-    func handleRecognizedGesture(_ identifier: String?) -> Bool {
-        guard isPresenting else { return false }
-        guard let selectedIdentifier else {
-            feedback = "教程打开期间已暂停执行手势动作"
-            return true
+    func handleRecognizedGesture(_ identifier: String?) -> TutorialGestureDecision {
+        guard isPresenting else { return .notHandled }
+        guard configurationForCurrentContext != nil else { return .notHandled }
+        guard let expected = step.gestureIdentifier else {
+            feedback = "当前任务请直接操作界面"
+            return .consume
         }
         guard let identifier else {
-            feedback = "没有识别出轨迹，请放大动作后再试一次 \(Self.displayName(for: selectedIdentifier))"
-            return true
+            feedback = "没有识别出轨迹，请放大动作后再试"
+            return .consume
+        }
+        guard identifier.caseInsensitiveCompare(expected) == .orderedSame else {
+            feedback = "识别为 \(Self.displayName(for: identifier))，当前需要 \(Self.displayName(for: expected))"
+            return .consume
         }
 
-        if selectedIdentifier.caseInsensitiveCompare(identifier) == .orderedSame {
-            practicedIdentifiers.insert(selectedIdentifier)
-            feedback = "识别成功：\(Self.displayName(for: selectedIdentifier))"
+        switch step {
+        case .copy:
+            pasteboardChangeBeforeAction = NSPasteboard.general.changeCount
+            verifyCopyAfterExecution()
+            return .execute
+        case .paste:
+            return .execute
+        case .back:
+            browserPageIndex = 0
+            emitSuccess("已返回上一页")
+            scheduleStep(.forward)
+            return .consume
+        case .forward:
+            browserPageIndex = 1
+            emitSuccess("已前进到下一页")
+            scheduleStep(.search)
+            return .consume
+        case .search:
+            waitingForSearchReturn = true
+            feedback = "正在默认浏览器中搜索；查看结果后返回 MouseTrails"
+            completedGestureCount += 1
             successEventID = UUID()
-        } else {
-            feedback = "识别为 \(Self.displayName(for: identifier))，请再试一次 \(Self.displayName(for: selectedIdentifier))"
+            return .execute
+        case .closeWindow:
+            demoControllers.first?.closeByGesture()
+            return .consume
+        case .enterFullScreen, .exitFullScreen:
+            demoControllers.first?.toggleFullScreenByGesture()
+            return .consume
+        case .minimize:
+            demoControllers.first?.minimizeByGesture()
+            return .consume
+        case .closeAll:
+            demoControllers.forEach { $0.closeByGesture() }
+            return .consume
+        case .createPin, .recognizeText:
+            return .execute
+        default:
+            return .consume
         }
-        return true
+    }
+
+    func applicationDidBecomeActive() {
+        guard waitingForSearchReturn else { return }
+        waitingForSearchReturn = false
+        emitSuccess("已完成真实搜索")
+        scheduleMove(to: .windows)
+    }
+
+    func handlePinnedImageInteraction(id: UUID, event: PinnedImageInteractionEvent) {
+        guard isPresenting, !isCleaningUp else { return }
+        switch event {
+        case .created where step == .createPin:
+            tutorialPinnedImageID = id
+            step = .dragPin
+            emitSuccess("贴图已生成，请把它拖到旁边")
+        case .moved where id == tutorialPinnedImageID && step == .dragPin:
+            step = .collapsePin
+            feedback = "拖动成功。现在左键单击贴图，将它折叠"
+        case .collapsed where id == tutorialPinnedImageID && step == .collapsePin:
+            step = .expandPin
+            feedback = "贴图已折叠。再左键单击一次恢复"
+        case .expanded where id == tutorialPinnedImageID && step == .expandPin:
+            step = .adjustPinOpacity
+            feedback = "贴图已恢复。将光标放在贴图上滚动，调整透明度"
+        case .opacityAdjusted where id == tutorialPinnedImageID && step == .adjustPinOpacity:
+            step = .copyPin
+            feedback = "透明度已改变。保持贴图展开并按 Command+C 复制"
+        case .copied where id == tutorialPinnedImageID && step == .copyPin:
+            step = .closePin
+            feedback = "图片已复制。最后在展开状态右键关闭贴图"
+        case .closed where id == tutorialPinnedImageID:
+            tutorialPinnedImageID = nil
+            if step == .closePin {
+                emitSuccess("贴图练习完成")
+                scheduleMove(to: .ocr)
+            } else {
+                step = .createPin
+                feedback = "贴图提前关闭了，请重新用顺时针方框生成贴图"
+                window?.makeKeyAndOrderFront(nil)
+            }
+        default:
+            break
+        }
+    }
+
+    func handleOCRResult(_ result: Result<String, Error>) {
+        guard isPresenting, step == .recognizeText else { return }
+        switch result {
+        case let .success(text):
+            guard !text.isEmpty else {
+                feedback = "没有识别到文字，请重新圈选示例文字"
+                return
+            }
+            recognizedText = text
+            let copied = NSPasteboard.general.string(forType: .string) == text
+            emitSuccess(copied ? "OCR 完成，结果已复制" : "OCR 完成")
+            scheduleMove(to: .finish, delay: .milliseconds(1_000))
+        case let .failure(error):
+            feedback = "OCR 失败：\(error.localizedDescription)"
+        }
     }
 
     func finish() {
@@ -185,24 +387,14 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         finishPresentation()
     }
 
-    private func finishPresentation() {
-        isPresenting = false
-        selectedIdentifier = nil
-        feedback = nil
-        onClose?()
-    }
-
     static func displayName(for identifier: String) -> String {
         switch identifier.uppercased() {
-        case "UP": return "上"
-        case "DOWN": return "下"
-        case "LEFT": return "左"
-        case "RIGHT": return "右"
-        case "UP_LEFT": return "左上直线"
+        case "UP": return "向上直线"
+        case "DOWN": return "向下直线"
+        case "LEFT": return "向左直线"
+        case "RIGHT": return "向右直线"
         case "UP_RIGHT": return "右上直线"
         case "DOWN_LEFT": return "左下直线"
-        case "DOWN_RIGHT": return "右下直线"
-        case "UP-LEFT": return "上 → 左"
         case "DOWN-RIGHT": return "下 → 右"
         case "DOWN-LEFT": return "下 → 左"
         case "LETTER_S": return "字母 S"
@@ -212,19 +404,363 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         }
     }
 
+    private func makeTutorialConfiguration() -> AppConfiguration {
+        var configuration: AppConfiguration
+        if let injectedTutorialConfiguration {
+            configuration = injectedTutorialConfiguration
+        } else if let url = Bundle.main.url(forResource: "default-config", withExtension: "json"),
+                  let data = try? Data(contentsOf: url),
+                  let decoded = try? JSONDecoder().decode(AppConfiguration.self, from: data) {
+            configuration = decoded
+        } else {
+            configuration = AppConfiguration()
+        }
+        configuration.gestureOptions.enabled = true
+        configuration.edgeScrollOptions.enabled = false
+        configuration.bindings.removeAll { binding in
+            binding.actions.contains {
+                $0.type == .windowAction && $0.value == WindowAction.quitApplication.rawValue
+            }
+        }
+        return configuration
+    }
+
+    private func ownsTutorialWindow(_ candidate: NSWindow) -> Bool {
+        if candidate === window { return true }
+        return demoControllers.contains { $0.window === candidate }
+    }
+
+    private func verifyCopyAfterExecution() {
+        transitionTask?.cancel()
+        transitionTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self, step == .copy else { return }
+            let pasteboard = NSPasteboard.general
+            guard pasteboard.changeCount != pasteboardChangeBeforeAction,
+                  pasteboard.string(forType: .string) == Self.editingSentence else {
+                feedback = "复制没有写入剪贴板，请再试一次"
+                return
+            }
+            emitSuccess("复制成功，接下来把句子粘贴回来")
+            scheduleStep(.paste)
+        }
+    }
+
+    private func emitSuccess(_ message: String) {
+        feedback = message
+        successEventID = UUID()
+        completedGestureCount += 1
+    }
+
+    private func scheduleStep(_ nextStep: TutorialStep, delay: Duration = .milliseconds(700)) {
+        transitionTask?.cancel()
+        transitionTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            step = nextStep
+            prepareCurrentStep()
+        }
+    }
+
+    private func scheduleMove(to page: TutorialPage, delay: Duration = .milliseconds(700)) {
+        transitionTask?.cancel()
+        transitionTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.move(to: page)
+        }
+    }
+
     private func move(to page: TutorialPage) {
+        transitionTask?.cancel()
+        if self.page == .windows { cleanupDemoWindows() }
+        if self.page == .pinnedImage { cleanupTutorialPinnedImage() }
+        waitingForSearchReturn = false
         self.page = page
-        selectedIdentifier = page.gestureIdentifiers.first
-        feedback = selectedIdentifier == nil ? nil : "选择卡片并按住右键绘制"
+        switch page {
+        case .welcome: step = .welcome
+        case .editing: step = .copy
+        case .browsing: step = .back
+        case .windows: step = .closeWindow
+        case .pinnedImage: step = .createPin
+        case .ocr: step = .recognizeText
+        case .finish: step = .finish
+        }
+        feedback = nil
+        prepareCurrentStep()
+    }
+
+    private func prepareCurrentStep() {
+        window?.makeKeyAndOrderFront(nil)
+        switch step {
+        case .copy:
+            copySelectionToken = UUID()
+            feedback = "句子已选中。按住右键画一条向上直线来复制"
+        case .paste:
+            pasteText = ""
+            pasteFocusToken = UUID()
+            feedback = "输入框已聚焦。画一条向下直线来粘贴"
+        case .back:
+            browserPageIndex = 1
+            feedback = "当前在第二页。画一条向左直线返回上一页"
+        case .forward:
+            feedback = "画一条向右直线回到下一页"
+        case .search:
+            searchSelectionToken = UUID()
+            feedback = "搜索词已选中。画出字母 S，在默认浏览器中搜索"
+        case .closeWindow:
+            if !allowsHeadlessInteraction { showSingleDemo(kind: .close) }
+            feedback = "在弹出的演示窗口中画“下 → 右”，将它关闭"
+        case .enterFullScreen:
+            if !allowsHeadlessInteraction { showSingleDemo(kind: .fullScreen) }
+            feedback = "在演示窗口中画右上直线，进入全屏"
+        case .exitFullScreen:
+            feedback = "再画一次右上直线，退出全屏"
+        case .minimize:
+            if !allowsHeadlessInteraction { showSingleDemo(kind: .minimize) }
+            feedback = "在演示窗口中画左下直线，将它最小化"
+        case .closeAll:
+            if !allowsHeadlessInteraction { showCloseAllDemoWindows() }
+            feedback = "画“下 → 左”，同时关闭三个演示窗口"
+        case .createPin:
+            feedback = "用顺时针方框圈住示例卡片，生成真实贴图"
+        case .recognizeText:
+            recognizedText = nil
+            feedback = "用逆时针方框圈住示例文字"
+        default:
+            break
+        }
+    }
+
+    private func showSingleDemo(kind: TutorialDemoKind) {
+        cleanupDemoWindows()
+        let controller = TutorialDemoWindowController(kind: kind)
+        controller.onClose = { [weak self, weak controller] triggered in
+            guard let self, let controller else { return }
+            demoControllers.removeAll { $0 === controller }
+            guard triggered, step == .closeWindow else { return }
+            window?.makeKeyAndOrderFront(nil)
+            emitSuccess("演示窗口已关闭")
+            scheduleStep(.enterFullScreen)
+        }
+        controller.onEnterFullScreen = { [weak self] triggered in
+            guard let self, triggered, step == .enterFullScreen else { return }
+            step = .exitFullScreen
+            controller.model.instruction = "全屏成功。再画一次右上直线恢复"
+            emitSuccess("已进入全屏")
+        }
+        controller.onExitFullScreen = { [weak self, weak controller] triggered in
+            guard let self, let controller, triggered, step == .exitFullScreen else { return }
+            emitSuccess("已退出全屏")
+            controller.closeSilently()
+            demoControllers.removeAll { $0 === controller }
+            scheduleStep(.minimize)
+        }
+        controller.onMiniaturize = { [weak self, weak controller] triggered in
+            guard let self, let controller, triggered, step == .minimize else { return }
+            emitSuccess("演示窗口已最小化")
+            Task { [weak self, weak controller] in
+                try? await Task.sleep(for: .milliseconds(650))
+                guard let self, let controller else { return }
+                controller.closeSilently()
+                demoControllers.removeAll { $0 === controller }
+                scheduleStep(.closeAll)
+            }
+        }
+        demoControllers = [controller]
+        controller.show()
+    }
+
+    private func showCloseAllDemoWindows() {
+        cleanupDemoWindows()
+        var controllers: [TutorialDemoWindowController] = []
+        for index in 1 ... 3 {
+            let controller = TutorialDemoWindowController(kind: .closeAll(index))
+            controller.onClose = { [weak self, weak controller] triggered in
+                guard let self, let controller else { return }
+                demoControllers.removeAll { $0 === controller }
+                guard triggered, step == .closeAll, demoControllers.isEmpty else { return }
+                window?.makeKeyAndOrderFront(nil)
+                emitSuccess("三个演示窗口已全部关闭")
+                scheduleMove(to: .pinnedImage)
+            }
+            controllers.append(controller)
+        }
+        demoControllers = controllers
+        for (index, controller) in controllers.enumerated() {
+            controller.show(offset: CGFloat(index) * 34)
+        }
+        controllers.last?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func cleanupDemoWindows() {
+        let controllers = demoControllers
+        demoControllers.removeAll()
+        controllers.forEach { $0.closeSilently() }
+    }
+
+    private func cleanupTutorialPinnedImage() {
+        guard let id = tutorialPinnedImageID else { return }
+        tutorialPinnedImageID = nil
+        isCleaningUp = true
+        dismissPinnedImage?(id)
+        isCleaningUp = false
+    }
+
+    private func cleanupTransientWindows() {
+        cleanupDemoWindows()
+        cleanupTutorialPinnedImage()
+    }
+
+    private func finishPresentation() {
+        transitionTask?.cancel()
+        cleanupTransientWindows()
+        isPresenting = false
+        waitingForSearchReturn = false
+        feedback = nil
+        onClose?()
+    }
+}
+
+private enum TutorialDemoKind: Equatable {
+    case close
+    case fullScreen
+    case minimize
+    case closeAll(Int)
+}
+
+@MainActor
+private final class TutorialDemoWindowModel: ObservableObject {
+    @Published var instruction: String
+    let gestureIdentifier: String
+
+    init(instruction: String, gestureIdentifier: String) {
+        self.instruction = instruction
+        self.gestureIdentifier = gestureIdentifier
+    }
+}
+
+@MainActor
+private final class TutorialDemoWindowController: NSWindowController, NSWindowDelegate {
+    let model: TutorialDemoWindowModel
+    var onClose: ((Bool) -> Void)?
+    var onMiniaturize: ((Bool) -> Void)?
+    var onEnterFullScreen: ((Bool) -> Void)?
+    var onExitFullScreen: ((Bool) -> Void)?
+
+    private var gestureTriggered = false
+    private var closesSilently = false
+
+    init(kind: TutorialDemoKind) {
+        let title: String
+        let instruction: String
+        let gesture: String
+        switch kind {
+        case .close:
+            title = "演示窗口：关闭我"
+            instruction = "画“下 → 右”关闭这个窗口"
+            gesture = "DOWN-RIGHT"
+        case .fullScreen:
+            title = "演示窗口：全屏切换"
+            instruction = "画右上直线进入全屏"
+            gesture = "UP_RIGHT"
+        case .minimize:
+            title = "演示窗口：最小化我"
+            instruction = "画左下直线将这个窗口最小化"
+            gesture = "DOWN_LEFT"
+        case let .closeAll(index):
+            title = "演示窗口 \(index)"
+            instruction = "画“下 → 左”同时关闭三个窗口"
+            gesture = "DOWN-LEFT"
+        }
+        model = TutorialDemoWindowModel(instruction: instruction, gestureIdentifier: gesture)
+        let rootView = TutorialDemoWindowView(model: model)
+        let window = NSWindow(contentViewController: NSHostingController(rootView: rootView))
+        window.title = title
+        window.setContentSize(NSSize(width: 430, height: 270))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.isReleasedWhenClosed = false
+        super.init(window: window)
+        window.delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func show(offset: CGFloat = 0) {
+        window?.center()
+        if let origin = window?.frame.origin {
+            window?.setFrameOrigin(CGPoint(x: origin.x + offset, y: origin.y - offset))
+        }
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    func closeByGesture() {
+        gestureTriggered = true
+        window?.performClose(nil)
+    }
+
+    func minimizeByGesture() {
+        gestureTriggered = true
+        window?.miniaturize(nil)
+    }
+
+    func toggleFullScreenByGesture() {
+        gestureTriggered = true
+        window?.toggleFullScreen(nil)
+    }
+
+    func closeSilently() {
+        closesSilently = true
+        window?.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose?(gestureTriggered && !closesSilently)
+        gestureTriggered = false
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) {
+        onMiniaturize?(gestureTriggered)
+        gestureTriggered = false
+    }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        onEnterFullScreen?(gestureTriggered)
+        gestureTriggered = false
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        onExitFullScreen?(gestureTriggered)
+        gestureTriggered = false
+    }
+}
+
+private struct TutorialDemoWindowView: View {
+    @ObservedObject var model: TutorialDemoWindowModel
+
+    var body: some View {
+        VStack(spacing: 18) {
+            GesturePreview(identifier: model.gestureIdentifier)
+                .frame(width: 150, height: 100)
+            Text(model.instruction)
+                .font(.title2.weight(.semibold))
+                .multilineTextAlignment(.center)
+            Text("这里只是教程演示，不会影响你的其他窗口")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(26)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 private struct TutorialView: View {
     @ObservedObject var coordinator: TutorialCoordinator
-    let configuration: AppConfiguration
     @ObservedObject var permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator
-
-    private let columns = [GridItem(.adaptive(minimum: 135, maximum: 175), spacing: 14)]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -282,36 +818,13 @@ private struct TutorialView: View {
     @ViewBuilder
     private var pageContent: some View {
         switch coordinator.page {
-        case .welcome:
-            welcomePage
-        case .defaultGestures:
-            lessonPage(
-                introduction: "这些手势覆盖日常编辑、浏览和搜索。点击一张卡片，再在任意位置按住右键绘制；教程只检查识别结果，不会执行动作。"
-            )
-        case .windowGestures:
-            lessonPage(
-                introduction: "窗口类动作在教程中会被安全拦截，因此可以放心练习“退出应用”和“关闭所有窗口”。"
-            )
-        case .pinnedImage:
-            featurePage(
-                description: "顺时针画出方框后，MouseTrails 会直接按轨迹包围范围生成贴图，无需二次点击截图。",
-                details: [
-                    "左键拖动贴图；单击可折叠或恢复",
-                    "展开状态右键关闭，折叠状态右键另存为 PNG",
-                    "光标在贴图上时滚动可调透明度；展开并选中后按 Command+C 复制"
-                ]
-            )
-        case .ocr:
-            featurePage(
-                description: "逆时针画出方框后，MouseTrails 会直接识别轨迹包围范围内的文字。",
-                details: [
-                    "识别由 macOS Vision 在本地完成，不上传图像或文字",
-                    "结果自动复制到剪贴板",
-                    "完成后通过系统通知显示文字摘要"
-                ]
-            )
-        case .finish:
-            finishPage
+        case .welcome: welcomePage
+        case .editing: editingPage
+        case .browsing: browsingPage
+        case .windows: windowPage
+        case .pinnedImage: pinnedImagePage
+        case .ocr: ocrPage
+        case .finish: finishPage
         }
     }
 
@@ -320,149 +833,139 @@ private struct TutorialView: View {
             Image(systemName: "hand.draw.fill")
                 .font(.system(size: 70))
                 .foregroundStyle(.tint)
-            Text("按住鼠标右键并移动即可绘制手势；触控板请使用能够持续按住的辅助点按方式。松开后 MouseTrails 才会识别轨迹。")
+            Text("按住鼠标右键并移动；触控板请使用能够持续按住的辅助点按。教程会让每个手势产生真实、可验证的结果。")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 650)
-
             VStack(spacing: 12) {
-                tutorialPermissionRow(
-                    .accessibility,
-                    icon: "hand.raised.fill",
-                    purpose: "手势监听与动作执行"
-                )
+                tutorialPermissionRow(.accessibility, icon: "hand.raised.fill", purpose: "手势监听与动作执行")
                 Divider()
-                tutorialPermissionRow(
-                    .screenRecording,
-                    icon: "rectangle.dashed.badge.record",
-                    purpose: "贴图、区域截图与 OCR"
+                tutorialPermissionRow(.screenRecording, icon: "rectangle.dashed.badge.record", purpose: "贴图、区域截图与 OCR")
+                Text("辅助功能是练习手势所必需的；屏幕录制可以稍后授权。MouseTrails 不会拦截 macOS 原生多指手势。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(18)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    private var editingPage: some View {
+        taskLayout {
+            if coordinator.expectedGestureIdentifier == "UP" {
+                TutorialTextField(
+                    text: .constant(TutorialCoordinator.editingSentence),
+                    isEditable: false,
+                    selectionToken: coordinator.copySelectionToken
                 )
-                Text("辅助功能用于教程练习；屏幕录制仅在贴图、截图或 OCR 时读取你圈选的区域。双指滚动、捏合缩放、Mission Control 等 macOS 原生触控板手势不会被拦截。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(18)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-        }
-    }
-
-    private func tutorialPermissionRow(
-        _ permission: SystemPermission,
-        icon: String,
-        purpose: String
-    ) -> some View {
-        let granted = permissionAuthorizationCoordinator.snapshot[permission] == .granted
-        return HStack(spacing: 12) {
-            Label(PermissionCoordinator.displayName(for: permission), systemImage: icon)
-                .frame(width: 120, alignment: .leading)
-            Text(purpose)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Label(
-                granted ? "已授权" : "未授权",
-                systemImage: granted ? "checkmark.circle.fill" : "xmark.circle.fill"
-            )
-            .foregroundStyle(granted ? Color.green : Color.red)
-            .frame(width: 82, alignment: .leading)
-            if !granted {
-                Button("授权") {
-                    permissionAuthorizationCoordinator.beginAuthorization(for: permission)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
+                .frame(height: 44)
+            } else {
+                TutorialTextField(
+                    text: Binding(
+                        get: { coordinator.pasteText },
+                        set: { coordinator.updatePastedText($0) }
+                    ),
+                    isEditable: true,
+                    selectionToken: coordinator.pasteFocusToken
+                )
+                .frame(height: 44)
             }
         }
     }
 
-    private func lessonPage(introduction: String) -> some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(introduction)
-                .foregroundStyle(.secondary)
-            LazyVGrid(columns: columns, spacing: 14) {
-                ForEach(coordinator.page.gestureIdentifiers, id: \.self) { identifier in
-                    gestureCard(identifier)
-                }
-            }
-            practiceFeedback
-        }
-    }
-
-    private func featurePage(description: String, details: [String]) -> some View {
-        VStack(spacing: 22) {
-            Text(description)
-                .font(.title3)
-                .multilineTextAlignment(.center)
-            if let identifier = coordinator.page.gestureIdentifiers.first {
-                gestureCard(identifier)
-                    .frame(maxWidth: 230)
-            }
-            practiceFeedback
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(details, id: \.self) { detail in
-                    Label(detail, systemImage: "checkmark.circle")
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(18)
-            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
-            Text("教程练习只验证方框方向，不会真的截图、生成贴图或执行 OCR。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func gestureCard(_ identifier: String) -> some View {
-        let selected = coordinator.selectedIdentifier == identifier
-        let practiced = coordinator.practicedIdentifiers.contains(identifier)
-        return Button {
-            coordinator.selectGesture(identifier)
-        } label: {
-            VStack(spacing: 10) {
-                ZStack(alignment: .topTrailing) {
-                    GesturePreview(identifier: identifier)
-                        .frame(height: 82)
-                    if practiced {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .padding(5)
+    private var browsingPage: some View {
+        taskLayout {
+            if coordinator.expectedGestureIdentifier == "LETTER_S" {
+                TutorialTextField(
+                    text: .constant(TutorialCoordinator.searchPhrase),
+                    isEditable: false,
+                    selectionToken: coordinator.searchSelectionToken
+                )
+                .frame(height: 44)
+            } else {
+                VStack(spacing: 14) {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Spacer()
+                        Text("示例浏览器 · 第 \(coordinator.browserPageIndex + 1) 页")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
                     }
+                    Divider()
+                    Text(coordinator.browserPageIndex == 0 ? "这里是上一页" : "这里是下一页")
+                        .font(.title2.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 90)
                 }
-                Text(TutorialCoordinator.displayName(for: identifier))
+                .padding(18)
+                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+            }
+        }
+    }
+
+    private var windowPage: some View {
+        taskLayout {
+            VStack(spacing: 10) {
+                Image(systemName: "macwindow.on.rectangle")
+                    .font(.system(size: 52))
+                    .foregroundStyle(.tint)
+                Text("请在弹出的演示窗口中完成当前任务")
                     .font(.headline)
-                Text(actionName(for: identifier))
+                Text("关闭、全屏、最小化和关闭全部都只作用于教程临时窗口。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .padding(10)
-            .frame(maxWidth: .infinity)
-            .background(
-                selected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06),
-                in: RoundedRectangle(cornerRadius: 12)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(selected ? Color.accentColor : Color.clear, lineWidth: 2)
             }
         }
-        .buttonStyle(.plain)
     }
 
-    private var practiceFeedback: some View {
-        HStack(spacing: 10) {
-            Image(systemName: feedbackIsSuccess ? "checkmark.circle.fill" : "hand.draw")
-                .foregroundStyle(feedbackIsSuccess ? Color.green : Color.accentColor)
-            Text(coordinator.feedback ?? "选择一个手势开始练习")
+    private var pinnedImagePage: some View {
+        taskLayout {
+            if coordinator.expectedGestureIdentifier == "SQUARE_CLOCKWISE" {
+                VStack(spacing: 12) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 54))
+                        .foregroundStyle(.indigo)
+                    Text("把这张示例卡片变成贴图")
+                        .font(.title2.weight(.bold))
+                    Text("用顺时针方框沿卡片边缘圈选")
+                        .foregroundStyle(.secondary)
+                }
+                .padding(28)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(colors: [.indigo.opacity(0.18), .cyan.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 18)
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("拖动贴图", systemImage: "1.circle.fill")
+                    Label("左键折叠，再左键恢复", systemImage: "2.circle.fill")
+                    Label("悬停滚动调整透明度", systemImage: "3.circle.fill")
+                    Label("展开状态按 Command+C 复制", systemImage: "4.circle.fill")
+                    Label("最后右键关闭", systemImage: "5.circle.fill")
+                }
                 .font(.headline)
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(22)
+                .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 14))
+            }
         }
-        .padding(14)
-        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private var feedbackIsSuccess: Bool {
-        coordinator.feedback?.hasPrefix("识别成功") == true
+    private var ocrPage: some View {
+        taskLayout {
+            VStack(spacing: 12) {
+                Text(TutorialCoordinator.ocrSample)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .padding(26)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow.opacity(0.16), in: RoundedRectangle(cornerRadius: 16))
+                if let recognizedText = coordinator.recognizedText {
+                    Label("识别结果：\(recognizedText)", systemImage: "text.viewfinder")
+                        .foregroundStyle(.green)
+                }
+            }
+        }
     }
 
     private var finishPage: some View {
@@ -472,7 +975,7 @@ private struct TutorialView: View {
                 .foregroundStyle(.green)
             Text("MouseTrails 已经可以开始使用")
                 .font(.largeTitle.weight(.bold))
-            Text("教程期间共练习了 \(coordinator.practicedIdentifiers.count) 个手势。以后可在“设置 → 通用 → 使用教程”随时重新打开。")
+            Text("你完成了 \(coordinator.completedGestureCount) 次真实操作。以后可在“设置 → 通用 → 使用教程”随时重新体验。")
                 .font(.title3)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -480,21 +983,81 @@ private struct TutorialView: View {
         .frame(maxWidth: .infinity, minHeight: 330)
     }
 
+    private func taskLayout<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 20) {
+            if let identifier = coordinator.expectedGestureIdentifier {
+                HStack(spacing: 22) {
+                    GesturePreview(identifier: identifier)
+                        .frame(width: 150, height: 105)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("当前只需完成这一项")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(TutorialCoordinator.displayName(for: identifier))
+                            .font(.title2.weight(.bold))
+                    }
+                    Spacer()
+                }
+                .padding(16)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+            }
+            content()
+            feedbackView
+        }
+    }
+
+    private var feedbackView: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "hand.draw")
+                .foregroundStyle(Color.accentColor)
+            Text(coordinator.feedback ?? "按照当前示例完成操作")
+                .font(.headline)
+            Spacer()
+        }
+        .padding(14)
+        .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func tutorialPermissionRow(_ permission: SystemPermission, icon: String, purpose: String) -> some View {
+        let granted = permissionAuthorizationCoordinator.snapshot[permission] == .granted
+        return HStack(spacing: 12) {
+            Label(PermissionCoordinator.displayName(for: permission), systemImage: icon)
+                .frame(width: 120, alignment: .leading)
+            Text(purpose)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Label(granted ? "已授权" : "未授权", systemImage: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(granted ? Color.green : Color.red)
+                .frame(width: 82, alignment: .leading)
+            if !granted {
+                Button("授权") { permissionAuthorizationCoordinator.beginAuthorization(for: permission) }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+            }
+        }
+    }
+
     private var navigationBar: some View {
         HStack {
             if coordinator.page != .finish {
                 Button("跳过教程") { coordinator.skip() }
                     .foregroundStyle(.secondary)
+                if coordinator.page != .welcome {
+                    Button("跳过本场景") { coordinator.skipCurrentScene() }
+                }
             }
             Spacer()
-            Button("上一步") { coordinator.previous() }
-                .disabled(coordinator.page == .welcome)
-            if coordinator.page == .finish {
-                Button("完成") { coordinator.finish() }
+            if coordinator.page != .welcome {
+                Button("上一个场景") { coordinator.previousScene() }
+            }
+            if coordinator.page == .welcome {
+                Button("开始体验") { coordinator.nextFromWelcome() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-            } else {
-                Button("下一步") { coordinator.next() }
+                    .disabled(permissionAuthorizationCoordinator.snapshot[.accessibility] != .granted)
+            } else if coordinator.page == .finish {
+                Button("完成") { coordinator.finish() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
             }
@@ -502,9 +1065,53 @@ private struct TutorialView: View {
         .padding(.horizontal, 28)
         .padding(.vertical, 16)
     }
+}
 
-    private func actionName(for identifier: String) -> String {
-        configuration.binding(for: identifier, bundleIdentifier: nil)?.name ?? "未绑定"
+private struct TutorialTextField: NSViewRepresentable {
+    @Binding var text: String
+    let isEditable: Bool
+    let selectionToken: UUID
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField(string: text)
+        field.delegate = context.coordinator
+        field.font = .systemFont(ofSize: 18, weight: .medium)
+        field.alignment = .center
+        field.isBezeled = true
+        field.bezelStyle = .roundedBezel
+        field.isSelectable = true
+        field.isEditable = isEditable
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        field.isEditable = isEditable
+        if field.stringValue != text { field.stringValue = text }
+        guard context.coordinator.lastSelectionToken != selectionToken else { return }
+        context.coordinator.lastSelectionToken = selectionToken
+        DispatchQueue.main.async {
+            field.window?.makeFirstResponder(field)
+            if self.isEditable {
+                field.currentEditor()?.selectedRange = NSRange(location: field.stringValue.count, length: 0)
+            } else {
+                field.selectText(nil)
+            }
+        }
+    }
+
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: TutorialTextField
+        var lastSelectionToken: UUID?
+
+        init(parent: TutorialTextField) { self.parent = parent }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
     }
 }
 
@@ -541,16 +1148,9 @@ private struct TutorialSuccessBurst: View {
                             with: .color(colors[index % colors.count])
                         )
                     }
-
                     context.opacity = max(0, 1 - progress * 0.85)
-                    let thumb = context.resolve(
-                        Text("👍")
-                            .font(.system(size: 72))
-                    )
-                    context.draw(
-                        thumb,
-                        at: CGPoint(x: center.x, y: center.y - 24 * easeOut(progress))
-                    )
+                    let thumb = context.resolve(Text("👍").font(.system(size: 72)))
+                    context.draw(thumb, at: CGPoint(x: center.x, y: center.y - 24 * easeOut(progress)))
                 }
             }
             .transition(.opacity)

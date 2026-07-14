@@ -1,47 +1,154 @@
+import AppKit
 import Foundation
+import MouseIncCore
 import XCTest
 @testable import MouseIncMac
 
 @MainActor
 final class TutorialCoordinatorTests: XCTestCase {
-    func testTutorialCompletionPersistsAndPracticeProducesSuccessEvent() throws {
-        let suiteName = "TutorialCoordinatorTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+    func testEditingAndBrowsingTasksAdvanceOnlyAfterRealResults() async throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let coordinator = TutorialCoordinator(defaults: defaults)
 
         XCTAssertTrue(coordinator.shouldPresentOnLaunch)
-        XCTAssertFalse(coordinator.handleRecognizedGesture("UP"))
+        XCTAssertEqual(coordinator.handleRecognizedGesture("UP"), .notHandled)
 
         coordinator.begin()
-        coordinator.next()
-        XCTAssertEqual(coordinator.page, .defaultGestures)
-        XCTAssertEqual(coordinator.selectedIdentifier, "UP")
+        XCTAssertEqual(coordinator.handleRecognizedGesture("UP"), .consume)
+        coordinator.nextFromWelcome()
+        XCTAssertEqual(coordinator.page, .editing)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "UP")
 
-        XCTAssertTrue(coordinator.handleRecognizedGesture("LEFT"))
-        XCTAssertTrue(coordinator.practicedIdentifiers.isEmpty)
+        XCTAssertEqual(coordinator.handleRecognizedGesture("LEFT"), .consume)
         XCTAssertNil(coordinator.successEventID)
 
-        XCTAssertTrue(coordinator.handleRecognizedGesture(nil))
-        XCTAssertTrue(coordinator.feedback?.contains("没有识别出轨迹") == true)
+        let pasteboard = NSPasteboard.general
+        XCTAssertEqual(coordinator.handleRecognizedGesture("UP"), .execute)
+        pasteboard.clearContents()
+        pasteboard.setString(TutorialCoordinator.editingSentence, forType: .string)
+        try await Task.sleep(for: .milliseconds(1_100))
 
-        XCTAssertTrue(coordinator.handleRecognizedGesture("UP"))
-        XCTAssertEqual(coordinator.practicedIdentifiers, ["UP"])
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "DOWN")
         XCTAssertNotNil(coordinator.successEventID)
+        coordinator.updatePastedText(TutorialCoordinator.editingSentence)
+        try await Task.sleep(for: .milliseconds(800))
+
+        XCTAssertEqual(coordinator.page, .browsing)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "LEFT")
+        XCTAssertEqual(coordinator.handleRecognizedGesture("LEFT"), .consume)
+        XCTAssertEqual(coordinator.browserPageIndex, 0)
+        try await Task.sleep(for: .milliseconds(800))
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "RIGHT")
+
+        XCTAssertEqual(coordinator.handleRecognizedGesture("RIGHT"), .consume)
+        try await Task.sleep(for: .milliseconds(800))
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "LETTER_S")
+
+        XCTAssertEqual(coordinator.handleRecognizedGesture("LETTER_S"), .execute)
+        XCTAssertNil(coordinator.configurationForCurrentContext)
+        coordinator.applicationDidBecomeActive()
+        try await Task.sleep(for: .milliseconds(800))
+        XCTAssertEqual(coordinator.page, .windows)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "DOWN-RIGHT")
 
         coordinator.finish()
         XCTAssertFalse(coordinator.shouldPresentOnLaunch)
         XCTAssertFalse(coordinator.isPresenting)
     }
 
-    func testPinAndOCRAreSeparateFromDefaultGestureLessons() throws {
-        let defaultLesson = Set(TutorialPage.defaultGestures.gestureIdentifiers)
-        let windowLesson = Set(TutorialPage.windowGestures.gestureIdentifiers)
+    func testTutorialConfigurationIsTemporaryAndExcludesQuitApplication() throws {
+        var source = AppConfiguration()
+        source.edgeScrollOptions.enabled = true
+        source.bindings.append(GestureBinding(
+            gesture: "UP-LEFT",
+            name: "退出当前应用",
+            actions: [.init(type: .windowAction, value: WindowAction.quitApplication.rawValue)]
+        ))
+        let (coordinator, defaults, suiteName) = try makeCoordinator(configuration: source)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        XCTAssertFalse(defaultLesson.contains("SQUARE_CLOCKWISE"))
-        XCTAssertFalse(defaultLesson.contains("SQUARE_COUNTERCLOCKWISE"))
-        XCTAssertFalse(windowLesson.contains("SQUARE_CLOCKWISE"))
-        XCTAssertEqual(TutorialPage.pinnedImage.gestureIdentifiers, ["SQUARE_CLOCKWISE"])
-        XCTAssertEqual(TutorialPage.ocr.gestureIdentifiers, ["SQUARE_COUNTERCLOCKWISE"])
+        coordinator.begin()
+        let temporary = try XCTUnwrap(coordinator.configurationForCurrentContext)
+
+        XCTAssertTrue(temporary.gestureOptions.enabled)
+        XCTAssertFalse(temporary.edgeScrollOptions.enabled)
+        XCTAssertFalse(temporary.bindings.contains { binding in
+            binding.actions.contains {
+                $0.type == .windowAction && $0.value == WindowAction.quitApplication.rawValue
+            }
+        })
+        XCTAssertTrue(source.edgeScrollOptions.enabled)
+        XCTAssertTrue(source.bindings.contains { $0.gesture == "UP-LEFT" })
+    }
+
+    func testPinnedImageLessonRequiresEveryInteractionAndUserClose() async throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        coordinator.begin()
+        coordinator.nextFromWelcome()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+
+        XCTAssertEqual(coordinator.page, .pinnedImage)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "SQUARE_CLOCKWISE")
+
+        let firstID = UUID()
+        coordinator.handlePinnedImageInteraction(id: firstID, event: .created)
+        coordinator.handlePinnedImageInteraction(id: firstID, event: .closed)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "SQUARE_CLOCKWISE")
+
+        let id = UUID()
+        coordinator.handlePinnedImageInteraction(id: id, event: .created)
+        XCTAssertNil(coordinator.expectedGestureIdentifier)
+        coordinator.handlePinnedImageInteraction(id: id, event: .moved)
+        coordinator.handlePinnedImageInteraction(id: id, event: .collapsed)
+        coordinator.handlePinnedImageInteraction(id: id, event: .expanded)
+        coordinator.handlePinnedImageInteraction(id: id, event: .opacityAdjusted)
+        coordinator.handlePinnedImageInteraction(id: id, event: .copied)
+
+        XCTAssertEqual(coordinator.page, .pinnedImage)
+        XCTAssertTrue(coordinator.feedback?.contains("右键关闭") == true)
+        coordinator.handlePinnedImageInteraction(id: id, event: .closed)
+        try await Task.sleep(for: .milliseconds(800))
+
+        XCTAssertEqual(coordinator.page, .ocr)
+        XCTAssertEqual(coordinator.expectedGestureIdentifier, "SQUARE_COUNTERCLOCKWISE")
+    }
+
+    func testOCRRequiresCopiedNonemptyResult() async throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        coordinator.begin()
+        coordinator.nextFromWelcome()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+
+        XCTAssertEqual(coordinator.page, .ocr)
+        coordinator.handleOCRResult(.success(""))
+        XCTAssertEqual(coordinator.page, .ocr)
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(TutorialCoordinator.ocrSample, forType: .string)
+        coordinator.handleOCRResult(.success(TutorialCoordinator.ocrSample))
+        try await Task.sleep(for: .milliseconds(1_100))
+
+        XCTAssertEqual(coordinator.page, .finish)
+        XCTAssertEqual(coordinator.recognizedText, TutorialCoordinator.ocrSample)
+    }
+
+    private func makeCoordinator(
+        configuration: AppConfiguration = AppConfiguration()
+    ) throws -> (TutorialCoordinator, UserDefaults, String) {
+        let suiteName = "TutorialCoordinatorTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        let coordinator = TutorialCoordinator(
+            defaults: defaults,
+            tutorialConfiguration: configuration,
+            allowsHeadlessInteraction: true
+        )
+        return (coordinator, defaults, suiteName)
     }
 }

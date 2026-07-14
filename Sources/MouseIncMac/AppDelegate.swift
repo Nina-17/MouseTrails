@@ -49,6 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let overlay = GestureOverlay()
         captureCoordinator.setGestureOverlay(overlay)
+        captureCoordinator.onPinnedImageInteraction = { [weak self] id, event in
+            self?.tutorialCoordinator.handlePinnedImageInteraction(id: id, event: event)
+        }
+        captureCoordinator.onOCRResult = { [weak self] result in
+            self?.tutorialCoordinator.handleOCRResult(result)
+        }
+        tutorialCoordinator.dismissPinnedImage = { [weak self] id in
+            self?.captureCoordinator.dismissPinnedImage(id: id)
+        }
         let executor = ActionExecutor(captureActionHandler: { [weak self] action, gestureBounds in
             self?.captureCoordinator.perform(action, gestureBounds: gestureBounds) ?? false
         }, ocrActionHandler: { [weak self] action, gestureBounds in
@@ -56,10 +65,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }, searchSelectedTextHandler: { value in
             SelectedTextSearch.perform(urlTemplate: value)
         }, keyStrokeHandler: { [weak self] keyStroke in
-            self?.captureCoordinator.copySelectedPinnedImage(for: keyStroke) ?? false
+            guard let self else { return false }
+            guard tutorialCoordinator.configurationForCurrentContext == nil else { return false }
+            return captureCoordinator.copySelectedPinnedImage(for: keyStroke)
         })
         let monitor = GestureMonitor(
-            configuration: { [weak self] in self?.configuration ?? AppConfiguration() },
+            configuration: { [weak self] in
+                guard let self else { return AppConfiguration() }
+                return tutorialCoordinator.configurationForCurrentContext ?? configuration
+            },
             overlay: overlay,
             executor: executor,
             customGestureRecorder: customGestureRecorder
@@ -68,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.lastGestureItem?.title = "最近手势：\(result)"
         }
         monitor.practiceGestureHandler = { [weak self] identifier in
-            self?.tutorialCoordinator.handleRecognizedGesture(identifier) ?? false
+            self?.tutorialCoordinator.handleRecognizedGesture(identifier) ?? .notHandled
         }
         self.monitor = monitor
 
@@ -91,6 +105,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         monitor?.stop()
         updateCoordinator.stop()
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        tutorialCoordinator.applicationDidBecomeActive()
     }
 
     func applicationShouldHandleReopen(
@@ -467,7 +485,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showTutorial() {
         activateForSettings()
         tutorialCoordinator.show(
-            configuration: configuration,
             permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
         )
     }

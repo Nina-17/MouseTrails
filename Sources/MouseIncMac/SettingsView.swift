@@ -152,14 +152,13 @@ struct SettingsView: View {
             LabeledContent {
                 Button("查看使用教程…") {
                     tutorialCoordinator.show(
-                        configuration: model.draft,
                         permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
                     )
                 }
             } label: {
                 Label("交互式手势教学", systemImage: "graduationcap")
             }
-            Text("重新练习默认手势，并单独查看贴图与 OCR 的操作方法。教程练习不会执行实际动作。")
+            Text("通过真实复制粘贴、浏览、窗口、贴图与 OCR 任务重新体验默认手势。教程使用临时配置，不会覆盖你的绑定。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

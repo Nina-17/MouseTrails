@@ -9,6 +9,9 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class CaptureCoordinator: NSObject {
+    var onPinnedImageInteraction: ((UUID, PinnedImageInteractionEvent) -> Void)?
+    var onOCRResult: ((Result<String, Error>) -> Void)?
+
     private var pinnedWindows: [PinnedImageWindowController] = []
     private weak var selectedPinnedWindow: PinnedImageWindowController?
     private weak var gestureOverlay: GestureOverlay?
@@ -74,6 +77,10 @@ final class CaptureCoordinator: NSObject {
         return selectedPinnedWindow?.copyImageIfExpanded() ?? false
     }
 
+    func dismissPinnedImage(id: UUID) {
+        pinnedWindows.first { $0.id == id }?.close()
+    }
+
     private func capture(rect: CGRect, action: CaptureAction) async {
         do {
             let image = try await captureImage(in: rect)
@@ -97,14 +104,16 @@ final class CaptureCoordinator: NSObject {
     private func recognizeText(rect: CGRect) async {
         do {
             let image = try await captureImage(in: rect)
-            try await recognizeAndCopy(image)
+            let text = try await recognizeAndCopy(image)
+            onOCRResult?(.success(text))
         } catch {
             DiagnosticLogger.shared.log("OCR failed: \(error.localizedDescription)")
+            onOCRResult?(.failure(error))
             presentError(title: "文字识别失败", message: error.localizedDescription)
         }
     }
 
-    private func recognizeAndCopy(_ image: CGImage) async throws {
+    private func recognizeAndCopy(_ image: CGImage) async throws -> String {
         let text = try await OCRTextRecognizer.recognize(image)
         if text.isEmpty {
             notificationCoordinator.postOCRResult(text: "")
@@ -117,6 +126,7 @@ final class CaptureCoordinator: NSObject {
         DiagnosticLogger.shared.log(
             "OCR completed; hasText=\(!text.isEmpty); copied=\(!text.isEmpty)"
         )
+        return text
     }
 
     private func captureImage(in rect: CGRect) async throws -> CGImage {
@@ -230,9 +240,14 @@ final class CaptureCoordinator: NSObject {
         controller.onSelected = { [weak self, weak controller] in
             self?.selectedPinnedWindow = controller
         }
+        controller.onInteraction = { [weak self, weak controller] event in
+            guard let controller else { return }
+            self?.onPinnedImageInteraction?(controller.id, event)
+        }
         pinnedWindows.append(controller)
         selectedPinnedWindow = controller
         controller.show()
+        onPinnedImageInteraction?(controller.id, .created)
     }
 
     private func copy(_ image: CGImage) {
@@ -443,8 +458,10 @@ private final class PinnedImagePanel: NSPanel {
 
 @MainActor
 private final class PinnedImageWindowController: NSWindowController, NSWindowDelegate {
+    let id = UUID()
     var onClose: (() -> Void)?
     var onSelected: (() -> Void)?
+    var onInteraction: ((PinnedImageInteractionEvent) -> Void)?
     private weak var imageView: PinnedImageView?
 
     init(image: CGImage, sourceRect: CGRect) {
@@ -481,6 +498,9 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
         imageView.onSelected = { [weak self] in
             self?.onSelected?()
         }
+        imageView.onInteraction = { [weak self] event in
+            self?.onInteraction?(event)
+        }
         panel.delegate = self
     }
 
@@ -497,6 +517,7 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
     }
 
     func windowWillClose(_ notification: Notification) {
+        onInteraction?(.closed)
         onClose?()
     }
 
@@ -507,6 +528,7 @@ private final class PinnedImageWindowController: NSWindowController, NSWindowDel
 
 private final class PinnedImageView: NSImageView {
     var onSelected: (() -> Void)?
+    var onInteraction: ((PinnedImageInteractionEvent) -> Void)?
     private let sourceImage: CGImage
     private var interactionState: PinnedImageInteractionState
 
@@ -555,6 +577,7 @@ private final class PinnedImageView: NSImageView {
                         dx: finalOrigin.x - initialOrigin.x,
                         dy: finalOrigin.y - initialOrigin.y
                     )
+                    onInteraction?(.moved)
                 } else {
                     toggleCompact()
                 }
@@ -579,6 +602,7 @@ private final class PinnedImageView: NSImageView {
         let direction: CGFloat = event.scrollingDeltaY >= 0 ? 1 : -1
         interactionState.adjustOpacity(by: direction * 0.05)
         window.alphaValue = interactionState.opacity
+        onInteraction?(.opacityAdjusted)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -598,6 +622,7 @@ private final class PinnedImageView: NSImageView {
         imageScaling = interactionState.isCompact ? .scaleNone : .scaleProportionallyUpOrDown
         imageAlignment = .alignCenter
         window.setFrame(interactionState.frame, display: true, animate: true)
+        onInteraction?(interactionState.isCompact ? .collapsed : .expanded)
     }
 
     func copyImageIfExpanded() -> Bool {
@@ -625,7 +650,9 @@ private final class PinnedImageView: NSImageView {
 
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        return pasteboard.writeObjects([item])
+        let copied = pasteboard.writeObjects([item])
+        if copied { onInteraction?(.copied) }
+        return copied
     }
 
     private func writeClipboardPNG(_ data: Data) throws -> URL {

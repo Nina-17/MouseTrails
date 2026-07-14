@@ -25,7 +25,7 @@ final class GestureMonitor: NSObject {
     private var edgeCooldown = EdgeScrollCooldown()
 
     var onGesture: ((String) -> Void)?
-    var practiceGestureHandler: ((String?) -> Bool)?
+    var practiceGestureHandler: ((String?) -> TutorialGestureDecision)?
 
     var isRunning: Bool {
         guard let eventTap else { return false }
@@ -330,7 +330,8 @@ final class GestureMonitor: NSObject {
                 minimumGestureLength: options.minimumGestureLength
             )
             let fixedGesture = recognizer.recognize(points)
-            if practiceGestureHandler?(fixedGesture) == true {
+            let tutorialDecision = practiceGestureHandler?(fixedGesture) ?? .notHandled
+            if tutorialDecision == .consume {
                 let result = fixedGesture ?? "未识别"
                 logger.info("Gesture consumed by tutorial: \(result, privacy: .public)")
                 DiagnosticLogger.shared.log("Gesture consumed by tutorial: \(result)")
