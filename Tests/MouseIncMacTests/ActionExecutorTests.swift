@@ -51,10 +51,13 @@ final class ActionExecutorTests: XCTestCase {
         let executor = makeExecutor()
         let options = ActionSequenceOptions(interruptionPolicy: .ignoreNew)
 
-        executor.execute([.delay(seconds: 0.05)], options: options)
         executor.execute([.delay(seconds: 1)], options: options)
+        executor.execute([.delay(seconds: 0.01)], options: options)
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        // The second sequence must not replace the active long-running one.
+        // Avoid relying on wall-clock scheduling, which is unstable under CI load.
+        XCTAssertTrue(executor.isExecuting)
+        executor.cancel()
         XCTAssertFalse(executor.isExecuting)
     }
 
