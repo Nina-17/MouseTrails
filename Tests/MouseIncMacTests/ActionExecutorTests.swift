@@ -87,6 +87,26 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(executor.isExecuting)
     }
 
+    func testSystemViewActionUsesInjectedHandler() async throws {
+        var receivedAction: SystemViewAction?
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            systemViewActionHandler: { action in
+                receivedAction = action
+                return true
+            }
+        )
+
+        executor.execute([.init(
+            type: .systemViewAction,
+            value: SystemViewAction.missionControl.rawValue
+        )])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(receivedAction, .missionControl)
+        XCTAssertFalse(executor.isExecuting)
+    }
+
 
     func testCaptureActionUsesInjectedHandler() async throws {
         var receivedAction: CaptureAction?

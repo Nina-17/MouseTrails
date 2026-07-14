@@ -89,8 +89,8 @@ private func runChecks() throws {
 private func runActionContractChecks() throws {
     try check(
         "schema version",
-        AppConfiguration.currentSchemaVersion == 5,
-        "Custom gesture configuration must encode schema 5"
+        AppConfiguration.currentSchemaVersion == 6,
+        "System view action configuration must encode schema 6"
     )
     try check(
         "default validation",

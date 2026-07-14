@@ -13,6 +13,7 @@ final class ActionExecutor {
 
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
     typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
+    typealias SystemViewActionHandler = @MainActor (SystemViewAction) -> Bool
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
     typealias SearchSelectedTextHandler = @MainActor (String) -> Bool
@@ -22,6 +23,7 @@ final class ActionExecutor {
     private var activeExecutionID: UUID?
     private let eventLogger: EventLogger
     private let windowActionHandler: WindowActionHandler
+    private let systemViewActionHandler: SystemViewActionHandler
     private let captureActionHandler: CaptureActionHandler
     private let ocrActionHandler: OCRActionHandler
     private let searchSelectedTextHandler: SearchSelectedTextHandler
@@ -32,6 +34,7 @@ final class ActionExecutor {
             DiagnosticLogger.shared.log(event: event, metadata: metadata)
         },
         windowActionHandler: @escaping WindowActionHandler = AccessibilityWindowActions.perform,
+        systemViewActionHandler: @escaping SystemViewActionHandler = SystemViewActions.perform,
         captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
         ocrActionHandler: @escaping OCRActionHandler = { _, _ in false },
         searchSelectedTextHandler: @escaping SearchSelectedTextHandler = { _ in false },
@@ -39,6 +42,7 @@ final class ActionExecutor {
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
+        self.systemViewActionHandler = systemViewActionHandler
         self.captureActionHandler = captureActionHandler
         self.ocrActionHandler = ocrActionHandler
         self.searchSelectedTextHandler = searchSelectedTextHandler
@@ -123,6 +127,9 @@ final class ActionExecutor {
         case .windowAction:
             guard let windowAction = WindowAction(rawValue: action.value) else { return false }
             return windowActionHandler(windowAction)
+        case .systemViewAction:
+            guard let systemAction = SystemViewAction(rawValue: action.value) else { return false }
+            return systemViewActionHandler(systemAction)
         case .captureAction:
             guard let captureAction = CaptureAction(rawValue: action.value) else { return false }
             return captureActionHandler(captureAction, context.gestureBounds)

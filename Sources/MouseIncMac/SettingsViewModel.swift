@@ -315,11 +315,38 @@ final class SettingsViewModel: ObservableObject {
             switch WindowAction(rawValue: action.value) {
             case .center: return "居中窗口"
             case .maximize: return "切换全屏"
+            case .fill: return "填充桌面"
+            case .restorePreviousSize: return "恢复窗口大小"
+            case .tileLeft: return "左半屏"
+            case .tileRight: return "右半屏"
+            case .tileTop: return "上半屏"
+            case .tileBottom: return "下半屏"
+            case .tileTopLeft: return "左上四分之一"
+            case .tileTopRight: return "右上四分之一"
+            case .tileBottomLeft: return "左下四分之一"
+            case .tileBottomRight: return "右下四分之一"
+            case .arrangeLeftRight: return "窗口左右排列"
+            case .arrangeRightLeft: return "窗口右左排列"
+            case .arrangeTopBottom: return "窗口上下排列"
+            case .arrangeBottomTop: return "窗口下上排列"
+            case .arrangeFour: return "窗口四等分"
+            case .arrangeLeftAndQuarters: return "窗口左侧与右侧上下排列"
+            case .arrangeRightAndQuarters: return "窗口右侧与左侧上下排列"
             case .minimize: return "最小化窗口"
             case .close: return "关闭窗口"
             case .closeAll: return "关闭所有类似窗口"
             case .quitApplication: return "退出当前应用"
             case nil: return "窗口操作"
+            }
+        case .systemViewAction:
+            switch SystemViewAction(rawValue: action.value) {
+            case .missionControl: return "打开调度中心"
+            case .appExpose: return "显示当前 App 窗口"
+            case .showDesktop: return "显示桌面"
+            case .previousSpace: return "上一个空间"
+            case .nextSpace: return "下一个空间"
+            case .launchpad: return "打开应用视图"
+            case nil: return "系统视图与空间"
             }
         case .captureAction:
             switch CaptureAction(rawValue: action.value) {

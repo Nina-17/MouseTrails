@@ -1,7 +1,7 @@
 import Foundation
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public let schemaVersion: Int
     public var gestureOptions: GestureOptions
@@ -447,6 +447,7 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case launchApplication
         case delay
         case windowAction
+        case systemViewAction
         case captureAction
         case ocrAction
         case searchSelectedText

@@ -276,6 +276,8 @@ public extension AppConfiguration {
             }
         case .windowAction:
             message = WindowAction(rawValue: value) == nil ? "不支持的窗口操作" : nil
+        case .systemViewAction:
+            message = SystemViewAction(rawValue: value) == nil ? "不支持的系统视图操作" : nil
         case .captureAction:
             message = CaptureAction(rawValue: value) == nil ? "不支持的截图操作" : nil
         case .ocrAction:

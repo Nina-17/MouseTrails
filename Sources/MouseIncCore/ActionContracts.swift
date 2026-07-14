@@ -10,6 +10,23 @@ public enum KeyStrokeModifier: String, Codable, CaseIterable, Sendable {
 public enum WindowAction: String, Codable, CaseIterable, Sendable {
     case center
     case maximize
+    case fill
+    case restorePreviousSize
+    case tileLeft
+    case tileRight
+    case tileTop
+    case tileBottom
+    case tileTopLeft
+    case tileTopRight
+    case tileBottomLeft
+    case tileBottomRight
+    case arrangeLeftRight
+    case arrangeRightLeft
+    case arrangeTopBottom
+    case arrangeBottomTop
+    case arrangeFour
+    case arrangeLeftAndQuarters
+    case arrangeRightAndQuarters
     case minimize
     case close
     case closeAll
@@ -33,6 +50,15 @@ public enum WindowAction: String, Codable, CaseIterable, Sendable {
         var container = encoder.singleValueContainer()
         try container.encode(rawValue)
     }
+}
+
+public enum SystemViewAction: String, Codable, CaseIterable, Sendable {
+    case missionControl
+    case appExpose
+    case showDesktop
+    case previousSpace
+    case nextSpace
+    case launchpad
 }
 
 public enum CaptureAction: String, Codable, CaseIterable, Sendable {
@@ -150,6 +176,13 @@ public enum ActionCatalog {
                 kind: .windowAction,
                 displayName: "窗口操作",
                 valueDescription: "例如 center",
+                requiredPermissions: [.accessibility]
+            )
+        case .systemViewAction:
+            ActionDescriptor(
+                kind: .systemViewAction,
+                displayName: "系统视图与空间",
+                valueDescription: "例如 missionControl",
                 requiredPermissions: [.accessibility]
             )
         case .captureAction:

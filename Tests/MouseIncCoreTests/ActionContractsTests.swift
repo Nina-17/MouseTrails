@@ -58,6 +58,10 @@ final class ActionContractsTests: XCTestCase {
             [.screenRecording]
         )
         XCTAssertEqual(
+            ActionCatalog.descriptor(for: .systemViewAction).requiredPermissions,
+            [.accessibility]
+        )
+        XCTAssertEqual(
             ActionCatalog.descriptor(for: .ocrAction).requiredPermissions,
             [.screenRecording]
         )
@@ -65,6 +69,41 @@ final class ActionContractsTests: XCTestCase {
             Set(ActionCatalog.descriptors.map(\.kind)),
             Set(ActionDefinition.Kind.allCases)
         )
+    }
+
+    func testSystemViewActionsValidateKnownValues() {
+        for action in SystemViewAction.allCases {
+            let valid = AppConfiguration(bindings: [
+                GestureBinding(
+                    gesture: "UP",
+                    name: "系统视图",
+                    actions: [.init(type: .systemViewAction, value: action.rawValue)]
+                )
+            ])
+            XCTAssertTrue(valid.validate().isValid, "Expected \(action) to be valid")
+        }
+
+        let invalid = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "无效系统视图",
+                actions: [.init(type: .systemViewAction, value: "unknown")]
+            )
+        ])
+        XCTAssertFalse(invalid.validate().isValid)
+    }
+
+    func testEveryWindowActionValidates() {
+        for action in WindowAction.allCases {
+            let configuration = AppConfiguration(bindings: [
+                GestureBinding(
+                    gesture: "UP",
+                    name: "窗口操作",
+                    actions: [.init(type: .windowAction, value: action.rawValue)]
+                )
+            ])
+            XCTAssertTrue(configuration.validate().isValid, "Expected \(action) to be valid")
+        }
     }
 
     func testCaptureActionsValidateKnownValues() {

@@ -148,8 +148,23 @@ final class AppConfigurationTests: XCTestCase {
 
         let configuration = try JSONDecoder().decode(AppConfiguration.self, from: schemaFour)
 
-        XCTAssertEqual(configuration.schemaVersion, 5)
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
         XCTAssertEqual(configuration.customGestures, [])
+    }
+
+    func testSchemaFiveMigratesToCurrentSchema() throws {
+        let data = Data(
+            #"{"schemaVersion":5,"gestureOptions":{},"customGestures":[],"bindings":[]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
+        let encoded = try JSONEncoder().encode(configuration)
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        XCTAssertEqual(object["schemaVersion"] as? Int, AppConfiguration.currentSchemaVersion)
     }
 
     func testCustomGesturesRoundTripInSchemaFive() throws {

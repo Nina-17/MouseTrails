@@ -519,6 +519,13 @@ struct SettingsView: View {
                 }
             }
             .labelsHidden()
+        } else if actionKind(binding: binding, action: action) == .systemViewAction {
+            Picker("系统视图与空间", selection: actionValueBinding(binding: binding, action: action)) {
+                ForEach(SystemViewAction.allCases, id: \.self) { value in
+                    Text(systemViewActionName(value)).tag(value.rawValue)
+                }
+            }
+            .labelsHidden()
         } else if actionKind(binding: binding, action: action) == .captureAction {
             Picker("截图动作", selection: actionValueBinding(binding: binding, action: action)) {
                 ForEach(CaptureAction.allCases, id: \.self) { value in
@@ -790,10 +797,38 @@ struct SettingsView: View {
         switch action {
         case .center: return "居中窗口"
         case .maximize: return "切换全屏（独立空间）"
+        case .fill: return "填充桌面（非全屏）"
+        case .restorePreviousSize: return "恢复布局前大小"
+        case .tileLeft: return "左半屏"
+        case .tileRight: return "右半屏"
+        case .tileTop: return "上半屏"
+        case .tileBottom: return "下半屏"
+        case .tileTopLeft: return "左上四分之一"
+        case .tileTopRight: return "右上四分之一"
+        case .tileBottomLeft: return "左下四分之一"
+        case .tileBottomRight: return "右下四分之一"
+        case .arrangeLeftRight: return "两个窗口：左侧与右侧"
+        case .arrangeRightLeft: return "两个窗口：右侧与左侧"
+        case .arrangeTopBottom: return "两个窗口：顶部与底部"
+        case .arrangeBottomTop: return "两个窗口：底部与顶部"
+        case .arrangeFour: return "四个窗口：四等分"
+        case .arrangeLeftAndQuarters: return "三个窗口：左侧与右侧上下"
+        case .arrangeRightAndQuarters: return "三个窗口：右侧与左侧上下"
         case .minimize: return "最小化窗口"
         case .close: return "关闭窗口"
         case .closeAll: return "关闭所有类似窗口"
         case .quitApplication: return "退出当前应用"
+        }
+    }
+
+    private func systemViewActionName(_ action: SystemViewAction) -> String {
+        switch action {
+        case .missionControl: return "打开调度中心"
+        case .appExpose: return "显示当前 App 的所有窗口"
+        case .showDesktop: return "显示桌面"
+        case .previousSpace: return "上一个空间"
+        case .nextSpace: return "下一个空间"
+        case .launchpad: return "打开应用视图（Launchpad）"
         }
     }
 
@@ -851,6 +886,7 @@ struct SettingsView: View {
         case .launchApplication: "com.apple.finder"
         case .delay: "0.2"
         case .windowAction: WindowAction.center.rawValue
+        case .systemViewAction: SystemViewAction.missionControl.rawValue
         case .captureAction: CaptureAction.pinRegion.rawValue
         case .ocrAction: OCRAction.recognizeRegion.rawValue
         case .searchSelectedText: SearchSelectedTextAction.defaultURLTemplate
