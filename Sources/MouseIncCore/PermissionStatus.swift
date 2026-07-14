@@ -3,7 +3,6 @@ import Foundation
 public enum SystemPermission: String, Codable, CaseIterable, Sendable {
     case accessibility
     case screenRecording
-    case inputMonitoring
 }
 
 public enum PermissionState: String, Codable, Sendable {

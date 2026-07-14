@@ -564,14 +564,13 @@ struct SettingsView: View {
                 .screenRecording,
                 required: model.draft.requiredPermissions.contains(.screenRecording)
             )
-            permissionRow(.inputMonitoring, required: false)
             HStack {
                 Spacer()
                 Button("重新检测权限") {
                     permissionAuthorizationCoordinator.refresh()
                 }
             }
-            Text("截图、贴图与 OCR 首次使用时才请求屏幕录制权限；拒绝不会影响手势和窗口动作。")
+            Text("屏幕录制权限仅用于截图、贴图与 OCR；拒绝不会影响手势和窗口动作。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("点击未授权项会打开对应的系统设置，并显示可拖入权限列表的 MouseTrails 应用图标。")
@@ -902,7 +901,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: return "手势识别、轨迹外观、动作序列和软件更新"
         case .bindings: return "管理轨迹、应用范围和执行动作"
         case .edgeScroll: return "左侧亮度与右侧音量控制"
-        case .permissions: return "查看辅助功能、屏幕录制和输入监控状态"
+        case .permissions: return "查看辅助功能和屏幕录制状态"
         case .data: return "导出、恢复并检查当前配置"
         }
     }

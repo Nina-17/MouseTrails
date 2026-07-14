@@ -40,8 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             event: .permissionSnapshot,
             metadata: [
                 "accessibility": permissions[.accessibility].rawValue,
-                "screenRecording": permissions[.screenRecording].rawValue,
-                "inputMonitoring": permissions[.inputMonitoring].rawValue
+                "screenRecording": permissions[.screenRecording].rawValue
             ]
         )
         loadConfiguration()
@@ -391,7 +390,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch permission {
         case .accessibility: return "辅助功能"
         case .screenRecording: return "屏幕录制"
-        case .inputMonitoring: return "输入监控"
         }
     }
 

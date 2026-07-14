@@ -117,7 +117,6 @@ final class ActionContractsTests: XCTestCase {
 
         XCTAssertEqual(snapshot[.accessibility], .granted)
         XCTAssertEqual(snapshot[.screenRecording], .denied)
-        XCTAssertEqual(snapshot[.inputMonitoring], .notDetermined)
         XCTAssertTrue(snapshot.satisfies([.accessibility]))
         XCTAssertFalse(snapshot.satisfies([.accessibility, .screenRecording]))
     }

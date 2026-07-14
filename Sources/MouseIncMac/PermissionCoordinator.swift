@@ -7,8 +7,7 @@ enum PermissionCoordinator {
         PermissionSnapshot(
             states: [
                 .accessibility: AccessibilityPermission.isGranted ? .granted : .denied,
-                .screenRecording: CGPreflightScreenCaptureAccess() ? .granted : .denied,
-                .inputMonitoring: CGPreflightListenEventAccess() ? .granted : .denied
+                .screenRecording: CGPreflightScreenCaptureAccess() ? .granted : .denied
             ]
         )
     }
@@ -20,8 +19,6 @@ enum PermissionCoordinator {
             anchor = "Privacy_Accessibility"
         case .screenRecording:
             anchor = "Privacy_ScreenCapture"
-        case .inputMonitoring:
-            anchor = "Privacy_ListenEvent"
         }
         return URL(
             string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)"
@@ -39,7 +36,6 @@ enum PermissionCoordinator {
         switch permission {
         case .accessibility: return "辅助功能"
         case .screenRecording: return "屏幕录制"
-        case .inputMonitoring: return "输入监控"
         }
     }
 }

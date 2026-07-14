@@ -326,18 +326,18 @@ private struct TutorialView: View {
                 .frame(maxWidth: 650)
 
             VStack(spacing: 12) {
-                HStack {
-                    Label("辅助功能权限", systemImage: "hand.raised.fill")
-                    Spacer()
-                    permissionStatus
-                }
-                if permissionAuthorizationCoordinator.snapshot[.accessibility] != .granted {
-                    Button("打开辅助功能授权") {
-                        permissionAuthorizationCoordinator.beginAuthorization(for: .accessibility)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                Text("教程练习需要辅助功能权限。双指滚动、捏合缩放、Mission Control 等 macOS 原生触控板手势不会被拦截。")
+                tutorialPermissionRow(
+                    .accessibility,
+                    icon: "hand.raised.fill",
+                    purpose: "手势监听与动作执行"
+                )
+                Divider()
+                tutorialPermissionRow(
+                    .screenRecording,
+                    icon: "rectangle.dashed.badge.record",
+                    purpose: "贴图、区域截图与 OCR"
+                )
+                Text("辅助功能用于教程练习；屏幕录制仅在贴图、截图或 OCR 时读取你圈选的区域。双指滚动、捏合缩放、Mission Control 等 macOS 原生触控板手势不会被拦截。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -346,10 +346,33 @@ private struct TutorialView: View {
         }
     }
 
-    private var permissionStatus: some View {
-        let granted = permissionAuthorizationCoordinator.snapshot[.accessibility] == .granted
-        return Label(granted ? "已授权" : "未授权", systemImage: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
+    private func tutorialPermissionRow(
+        _ permission: SystemPermission,
+        icon: String,
+        purpose: String
+    ) -> some View {
+        let granted = permissionAuthorizationCoordinator.snapshot[permission] == .granted
+        return HStack(spacing: 12) {
+            Label(PermissionCoordinator.displayName(for: permission), systemImage: icon)
+                .frame(width: 120, alignment: .leading)
+            Text(purpose)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Label(
+                granted ? "已授权" : "未授权",
+                systemImage: granted ? "checkmark.circle.fill" : "xmark.circle.fill"
+            )
             .foregroundStyle(granted ? Color.green : Color.red)
+            .frame(width: 82, alignment: .leading)
+            if !granted {
+                Button("授权") {
+                    permissionAuthorizationCoordinator.beginAuthorization(for: permission)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+            }
+        }
     }
 
     private func lessonPage(introduction: String) -> some View {
