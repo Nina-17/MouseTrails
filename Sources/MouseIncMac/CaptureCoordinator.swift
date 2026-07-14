@@ -600,7 +600,8 @@ private final class PinnedImageView: NSImageView {
         guard let window else { return }
         guard event.scrollingDeltaY != 0 else { return }
         let direction: CGFloat = event.scrollingDeltaY >= 0 ? 1 : -1
-        interactionState.adjustOpacity(by: direction * 0.05)
+        let step: CGFloat = event.hasPreciseScrollingDeltas ? 0.01 : 0.03
+        interactionState.adjustOpacity(by: direction * step)
         window.alphaValue = interactionState.opacity
         onInteraction?(.opacityAdjusted)
     }
@@ -690,6 +691,7 @@ private final class PinnedImageView: NSImageView {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try data.write(to: url, options: .atomic)
+            onInteraction?(.savedAs)
         } catch {
             let alert = NSAlert(error: error)
             alert.runModal()

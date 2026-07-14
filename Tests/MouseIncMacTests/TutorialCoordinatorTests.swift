@@ -81,6 +81,21 @@ final class TutorialCoordinatorTests: XCTestCase {
         XCTAssertTrue(source.bindings.contains { $0.gesture == "UP-LEFT" })
     }
 
+    func testClosingTutorialDoesNotMarkItCompleteForSystemRestart() throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        coordinator.begin()
+        coordinator.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+
+        XCTAssertFalse(coordinator.isPresenting)
+        XCTAssertTrue(coordinator.shouldPresentOnLaunch)
+
+        coordinator.begin()
+        coordinator.skip()
+        XCTAssertFalse(coordinator.shouldPresentOnLaunch)
+    }
+
     func testPinnedImageLessonRequiresEveryInteractionAndUserClose() async throws {
         let (coordinator, defaults, suiteName) = try makeCoordinator()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -102,7 +117,11 @@ final class TutorialCoordinatorTests: XCTestCase {
         coordinator.handlePinnedImageInteraction(id: id, event: .created)
         XCTAssertNil(coordinator.expectedGestureIdentifier)
         coordinator.handlePinnedImageInteraction(id: id, event: .moved)
+        XCTAssertTrue(coordinator.completedPinnedImageSteps.contains(.drag))
         coordinator.handlePinnedImageInteraction(id: id, event: .collapsed)
+        XCTAssertTrue(coordinator.completedPinnedImageSteps.contains(.collapse))
+        coordinator.handlePinnedImageInteraction(id: id, event: .savedAs)
+        XCTAssertTrue(coordinator.completedPinnedImageSteps.contains(.saveAs))
         coordinator.handlePinnedImageInteraction(id: id, event: .expanded)
         coordinator.handlePinnedImageInteraction(id: id, event: .opacityAdjusted)
         coordinator.handlePinnedImageInteraction(id: id, event: .copied)
@@ -114,6 +133,24 @@ final class TutorialCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.page, .ocr)
         XCTAssertEqual(coordinator.expectedGestureIdentifier, "SQUARE_COUNTERCLOCKWISE")
+        XCTAssertEqual(
+            coordinator.completedPinnedImageSteps,
+            Set(PinnedImageTutorialStep.allCases)
+        )
+    }
+
+    func testRectanglePreviewsStartAtRequestedTopCorners() throws {
+        let clockwise = try XCTUnwrap(
+            GesturePreview.rectanglePreviewPoints(for: "SQUARE_CLOCKWISE")
+        )
+        let counterclockwise = try XCTUnwrap(
+            GesturePreview.rectanglePreviewPoints(for: "SQUARE_COUNTERCLOCKWISE")
+        )
+
+        XCTAssertEqual(clockwise.first, CGPoint(x: 1, y: 1))
+        XCTAssertEqual(clockwise[1], CGPoint(x: 1, y: 0))
+        XCTAssertEqual(counterclockwise.first, CGPoint(x: 0, y: 1))
+        XCTAssertEqual(counterclockwise[1], CGPoint(x: 0, y: 0))
     }
 
     func testOCRRequiresCopiedNonemptyResult() async throws {

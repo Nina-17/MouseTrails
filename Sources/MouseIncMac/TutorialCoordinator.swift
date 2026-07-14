@@ -59,6 +59,7 @@ private enum TutorialStep: Equatable {
     case createPin
     case dragPin
     case collapsePin
+    case savePin
     case expandPin
     case adjustPinOpacity
     case copyPin
@@ -88,10 +89,33 @@ enum PinnedImageInteractionEvent: Equatable {
     case created
     case moved
     case collapsed
+    case savedAs
     case expanded
     case opacityAdjusted
     case copied
     case closed
+}
+
+enum PinnedImageTutorialStep: String, CaseIterable, Hashable {
+    case drag
+    case collapse
+    case saveAs
+    case expand
+    case opacity
+    case copy
+    case close
+
+    var title: String {
+        switch self {
+        case .drag: return "拖动贴图"
+        case .collapse: return "左键折叠"
+        case .saveAs: return "折叠状态右键另存为"
+        case .expand: return "左键恢复"
+        case .opacity: return "悬停滚动调整透明度"
+        case .copy: return "展开状态按 Command+C 复制"
+        case .close: return "展开状态右键关闭"
+        }
+    }
 }
 
 @MainActor
@@ -100,8 +124,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         static let completedVersion = "tutorial.completedVersion"
     }
 
-    static let currentTutorialVersion = 2
-    static let editingSentence = "MouseTrails 让每一次手势都更自然。"
+    static let currentTutorialVersion = 3
+    static let editingSentence = "“人充满劳绩，但诗意地栖居在这块大地之上。” —— 荷尔德林《人，诗意的栖居》"
     static let searchPhrase = "MouseTrails macOS 手势工具"
     static let ocrSample = "MouseTrails 教程识别成功"
 
@@ -116,6 +140,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     @Published private(set) var copySelectionToken = UUID()
     @Published private(set) var pasteFocusToken = UUID()
     @Published private(set) var searchSelectionToken = UUID()
+    @Published private(set) var completedPinnedImageSteps: Set<PinnedImageTutorialStep> = []
 
     var onClose: (@MainActor () -> Void)?
     var dismissPinnedImage: (@MainActor (UUID) -> Void)?
@@ -180,6 +205,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         browserPageIndex = 1
         recognizedText = nil
         completedGestureCount = 0
+        completedPinnedImageSteps = []
         waitingForSearchReturn = false
         isPresenting = true
     }
@@ -318,27 +344,38 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
             step = .dragPin
             emitSuccess("贴图已生成，请把它拖到旁边")
         case .moved where id == tutorialPinnedImageID && step == .dragPin:
+            completedPinnedImageSteps.insert(.drag)
             step = .collapsePin
             feedback = "拖动成功。现在左键单击贴图，将它折叠"
         case .collapsed where id == tutorialPinnedImageID && step == .collapsePin:
+            completedPinnedImageSteps.insert(.collapse)
+            step = .savePin
+            feedback = "贴图已折叠。现在右键贴图，选择位置完成另存为"
+        case .savedAs where id == tutorialPinnedImageID && step == .savePin:
+            completedPinnedImageSteps.insert(.saveAs)
             step = .expandPin
-            feedback = "贴图已折叠。再左键单击一次恢复"
+            feedback = "另存为完成。现在左键单击贴图，将它恢复"
         case .expanded where id == tutorialPinnedImageID && step == .expandPin:
+            completedPinnedImageSteps.insert(.expand)
             step = .adjustPinOpacity
             feedback = "贴图已恢复。将光标放在贴图上滚动，调整透明度"
         case .opacityAdjusted where id == tutorialPinnedImageID && step == .adjustPinOpacity:
+            completedPinnedImageSteps.insert(.opacity)
             step = .copyPin
             feedback = "透明度已改变。保持贴图展开并按 Command+C 复制"
         case .copied where id == tutorialPinnedImageID && step == .copyPin:
+            completedPinnedImageSteps.insert(.copy)
             step = .closePin
             feedback = "图片已复制。最后在展开状态右键关闭贴图"
         case .closed where id == tutorialPinnedImageID:
             tutorialPinnedImageID = nil
             if step == .closePin {
+                completedPinnedImageSteps.insert(.close)
                 emitSuccess("贴图练习完成")
                 scheduleMove(to: .ocr)
             } else {
                 step = .createPin
+                completedPinnedImageSteps = []
                 feedback = "贴图提前关闭了，请重新用顺时针方框生成贴图"
                 window?.makeKeyAndOrderFront(nil)
             }
@@ -383,7 +420,6 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     }
 
     func windowWillClose(_ notification: Notification) {
-        defaults.set(Self.currentTutorialVersion, forKey: DefaultsKey.completedVersion)
         finishPresentation()
     }
 
@@ -487,6 +523,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .finish: step = .finish
         }
         feedback = nil
+        if page == .pinnedImage { completedPinnedImageSteps = [] }
         prepareCurrentStep()
     }
 
@@ -853,12 +890,17 @@ private struct TutorialView: View {
     private var editingPage: some View {
         taskLayout {
             if coordinator.expectedGestureIdentifier == "UP" {
-                TutorialTextField(
-                    text: .constant(TutorialCoordinator.editingSentence),
-                    isEditable: false,
-                    selectionToken: coordinator.copySelectionToken
-                )
-                .frame(height: 44)
+                VStack(spacing: 10) {
+                    TutorialTextField(
+                        text: .constant(TutorialCoordinator.editingSentence),
+                        isEditable: false,
+                        selectionToken: coordinator.copySelectionToken
+                    )
+                    .frame(height: 44)
+                    Text("这个手势不仅能复制文字，在 Finder 中也可以复制选中的文件。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
                 TutorialTextField(
                     text: Binding(
@@ -938,11 +980,24 @@ private struct TutorialView: View {
                 )
             } else {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label("拖动贴图", systemImage: "1.circle.fill")
-                    Label("左键折叠，再左键恢复", systemImage: "2.circle.fill")
-                    Label("悬停滚动调整透明度", systemImage: "3.circle.fill")
-                    Label("展开状态按 Command+C 复制", systemImage: "4.circle.fill")
-                    Label("最后右键关闭", systemImage: "5.circle.fill")
+                    ForEach(Array(PinnedImageTutorialStep.allCases.enumerated()), id: \.element) { index, item in
+                        HStack(spacing: 10) {
+                            Image(systemName: coordinator.completedPinnedImageSteps.contains(item)
+                                ? "checkmark.circle.fill"
+                                : "\(index + 1).circle.fill")
+                                .foregroundStyle(
+                                    coordinator.completedPinnedImageSteps.contains(item)
+                                        ? Color.green
+                                        : Color.accentColor
+                                )
+                            Text(item.title)
+                            Spacer()
+                            if coordinator.completedPinnedImageSteps.contains(item) {
+                                Text("✅")
+                                    .accessibilityLabel("已完成")
+                            }
+                        }
+                    }
                 }
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)

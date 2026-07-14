@@ -72,19 +72,8 @@ struct GesturePreview: View {
         guard !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
-        switch identifier.uppercased() {
-        case "SQUARE_COUNTERCLOCKWISE":
-            return [
-                CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0),
-                CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 0)
-            ]
-        case "SQUARE_CLOCKWISE":
-            return [
-                CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1),
-                CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0)
-            ]
-        default:
-            break
+        if let rectanglePoints = Self.rectanglePreviewPoints(for: identifier) {
+            return rectanglePoints
         }
         if let template = GestureTemplate.builtIns.first(where: {
             $0.identifier.caseInsensitiveCompare(identifier) == .orderedSame
@@ -110,6 +99,25 @@ struct GesturePreview: View {
             result.append(CGPoint(x: last.x + delta.x, y: last.y + delta.y))
         }
         return result.count > 1 ? result : []
+    }
+
+    static func rectanglePreviewPoints(for identifier: String) -> [CGPoint]? {
+        switch identifier.uppercased() {
+        case "SQUARE_CLOCKWISE":
+            // Start at the top-right corner, then travel clockwise.
+            return [
+                CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0),
+                CGPoint(x: 0, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)
+            ]
+        case "SQUARE_COUNTERCLOCKWISE":
+            // Start at the top-left corner, then travel counterclockwise.
+            return [
+                CGPoint(x: 0, y: 1), CGPoint(x: 0, y: 0),
+                CGPoint(x: 1, y: 0), CGPoint(x: 1, y: 1), CGPoint(x: 0, y: 1)
+            ]
+        default:
+            return nil
+        }
     }
 
     private func mapped(_ point: CGPoint, in size: CGSize, points: [CGPoint]) -> CGPoint {
