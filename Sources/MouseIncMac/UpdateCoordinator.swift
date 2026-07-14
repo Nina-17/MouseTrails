@@ -194,6 +194,11 @@ final class UpdateCoordinator: ObservableObject {
                         title: "更新已下载",
                         message: "请手动打开 \(fileURL.path)"
                     )
+                } else {
+                    presentInformation(
+                        title: "请完成更新安装",
+                        message: "安装器已打开。请将 MouseTrails.app 覆盖当前正在运行的应用：\n\(Bundle.main.bundleURL.path)\n\n若将它拖入另一个 Applications 文件夹，请随后从该新位置启动应用。"
+                    )
                 }
             } catch {
                 guard let self else { return }

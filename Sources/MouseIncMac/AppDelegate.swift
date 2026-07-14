@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loadConfiguration()
         configureStatusItem()
         configureMainMenu()
+        presentNewerInstalledCopyIfNeeded()
 
         let overlay = GestureOverlay()
         captureCoordinator.setGestureOverlay(overlay)
@@ -245,6 +246,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.updateItem = updateItem
         updateLaunchAtLoginMenuItem()
         updatePermissionMenus()
+    }
+
+    private func presentNewerInstalledCopyIfNeeded() {
+        guard let newerCopy = InstalledAppLocator.newerInstalledCopy() else { return }
+
+        DiagnosticLogger.shared.log(
+            "Newer installed app copy detected version=\(newerCopy.version)"
+        )
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = "检测到已安装的新版本"
+        alert.informativeText = "当前运行的是 \(updateCoordinator.currentVersionString)（\(Bundle.main.bundleURL.path)）。\n\n已安装的 \(newerCopy.version) 位于：\n\(newerCopy.url.path)\n\n启动新版本可避免继续使用旧副本。"
+        alert.addButton(withTitle: "启动新版本")
+        alert.addButton(withTitle: "继续当前版本")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: newerCopy.url, configuration: configuration) { _, error in
+            if error == nil {
+                Task { @MainActor in
+                    NSApplication.shared.terminate(nil)
+                }
+            }
+        }
     }
 
     private func configureMainMenu() {
