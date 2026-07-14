@@ -268,8 +268,47 @@ final class TutorialCoordinatorTests: XCTestCase {
         coordinator.handleOCRResult(.success(TutorialCoordinator.ocrSample))
         try await Task.sleep(for: .milliseconds(1_100))
 
-        XCTAssertEqual(coordinator.page, .finish)
+        XCTAssertEqual(coordinator.page, .edgeScroll)
         XCTAssertEqual(coordinator.recognizedText, TutorialCoordinator.ocrSample)
+
+        let edgeConfiguration = try XCTUnwrap(coordinator.configurationForCurrentContext)
+        XCTAssertTrue(edgeConfiguration.edgeScrollOptions.enabled)
+        coordinator.handleEdgeScroll(.left)
+        XCTAssertEqual(coordinator.completedEdgeScrollSteps, [.brightness])
+        XCTAssertEqual(coordinator.page, .edgeScroll)
+        coordinator.handleEdgeScroll(.right)
+        XCTAssertEqual(
+            coordinator.completedEdgeScrollSteps,
+            Set(EdgeScrollTutorialStep.allCases)
+        )
+        try await Task.sleep(for: .milliseconds(1_100))
+
+        XCTAssertEqual(coordinator.page, .finish)
+        let finishConfiguration = try XCTUnwrap(coordinator.configurationForCurrentContext)
+        XCTAssertFalse(finishConfiguration.edgeScrollOptions.enabled)
+    }
+
+    func testEdgeScrollLessonIgnoresUnsupportedAndRepeatedEdges() throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        coordinator.begin()
+        coordinator.nextFromWelcome()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+        coordinator.skipCurrentScene()
+
+        XCTAssertEqual(coordinator.page, .edgeScroll)
+        coordinator.handleEdgeScroll(.top)
+        coordinator.handleEdgeScroll(.bottom)
+        XCTAssertTrue(coordinator.completedEdgeScrollSteps.isEmpty)
+
+        coordinator.handleEdgeScroll(.right)
+        let completedCount = coordinator.completedGestureCount
+        coordinator.handleEdgeScroll(.right)
+        XCTAssertEqual(coordinator.completedGestureCount, completedCount)
+        XCTAssertEqual(coordinator.completedEdgeScrollSteps, [.volume])
     }
 
     private func makeCoordinator(

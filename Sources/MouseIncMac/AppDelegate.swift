@@ -97,6 +97,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onGesture = { [weak self] result in
             self?.lastGestureItem?.title = "最近手势：\(result)"
         }
+        monitor.onEdgeScroll = { [weak self] edge in
+            self?.tutorialCoordinator.handleEdgeScroll(edge)
+        }
         monitor.practiceGestureHandler = { [weak self] identifier in
             self?.tutorialCoordinator.handleRecognizedGesture(identifier) ?? .notHandled
         }

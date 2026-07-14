@@ -25,6 +25,7 @@ final class GestureMonitor: NSObject {
     private var edgeCooldown = EdgeScrollCooldown()
 
     var onGesture: ((String) -> Void)?
+    var onEdgeScroll: ((ScreenEdge) -> Void)?
     var practiceGestureHandler: ((String?) -> TutorialGestureDecision)?
 
     var isRunning: Bool {
@@ -224,6 +225,7 @@ final class GestureMonitor: NSObject {
             "Edge scroll edge=\(edge.rawValue) delta=\(delta) adjusted=\(succeeded)"
         )
         if succeeded {
+            onEdgeScroll?(edge)
             onGesture?(edge == .left ? "边缘亮度" : "边缘音量")
         }
     }

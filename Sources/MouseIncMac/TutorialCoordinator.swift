@@ -15,6 +15,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
     case windows
     case pinnedImage
     case ocr
+    case edgeScroll
     case finish
 
     var id: Self { self }
@@ -27,6 +28,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .windows: return "窗口操作"
         case .pinnedImage: return "贴图"
         case .ocr: return "离线 OCR"
+        case .edgeScroll: return "边缘滚动"
         case .finish: return "体验完成"
         }
     }
@@ -39,6 +41,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .windows: return "只操作教程创建的临时窗口"
         case .pinnedImage: return "生成贴图并亲手完成全部常用操作"
         case .ocr: return "圈选文字、识别并复制真实结果"
+        case .edgeScroll: return "在屏幕左右边缘调整亮度与音量"
         case .finish: return "MouseTrails 已准备就绪"
         }
     }
@@ -66,6 +69,7 @@ private enum TutorialStep: Equatable {
     case copyPin
     case closePin
     case recognizeText
+    case edgeScroll
     case finish
 
     var gestureIdentifier: String? {
@@ -119,6 +123,11 @@ enum PinnedImageTutorialStep: String, CaseIterable, Hashable {
     }
 }
 
+enum EdgeScrollTutorialStep: String, CaseIterable, Hashable {
+    case brightness
+    case volume
+}
+
 @MainActor
 final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowDelegate {
     private enum DefaultsKey {
@@ -143,6 +152,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     @Published private(set) var pasteFocusToken = UUID()
     @Published private(set) var searchSelectionToken = UUID()
     @Published private(set) var completedPinnedImageSteps: Set<PinnedImageTutorialStep> = []
+    @Published private(set) var completedEdgeScrollSteps: Set<EdgeScrollTutorialStep> = []
 
     var onClose: (@MainActor () -> Void)?
     var dismissPinnedImage: (@MainActor (UUID) -> Void)?
@@ -230,6 +240,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         recognizedText = nil
         completedGestureCount = 0
         completedPinnedImageSteps = []
+        completedEdgeScrollSteps = []
         searchGestureIdentifier = nil
         waitingForSearchReturn = false
         isPresenting = true
@@ -380,7 +391,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .browsing: move(to: .windows)
         case .windows: move(to: .pinnedImage)
         case .pinnedImage: move(to: .ocr)
-        case .ocr: move(to: .finish)
+        case .ocr: move(to: .edgeScroll)
+        case .edgeScroll: move(to: .finish)
         case .finish: break
         }
     }
@@ -393,7 +405,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .windows: move(to: .browsing)
         case .pinnedImage: move(to: .windows)
         case .ocr: move(to: .pinnedImage)
-        case .finish: move(to: .ocr)
+        case .edgeScroll: move(to: .ocr)
+        case .finish: move(to: .edgeScroll)
         }
     }
 
@@ -539,9 +552,31 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
             recognizedText = text
             let copied = NSPasteboard.general.string(forType: .string) == text
             emitSuccess(copied ? "OCR 完成，结果已复制" : "OCR 完成")
-            scheduleMove(to: .finish, delay: .milliseconds(1_000))
+            scheduleMove(to: .edgeScroll, delay: .milliseconds(1_000))
         case let .failure(error):
             feedback = "OCR 失败：\(error.localizedDescription)"
+        }
+    }
+
+    func handleEdgeScroll(_ edge: ScreenEdge) {
+        guard isPresenting, step == .edgeScroll else { return }
+        let completedStep: EdgeScrollTutorialStep
+        switch edge {
+        case .left: completedStep = .brightness
+        case .right: completedStep = .volume
+        case .top, .bottom: return
+        }
+        guard completedEdgeScrollSteps.insert(completedStep).inserted else { return }
+
+        emitSuccess(completedStep == .brightness ? "亮度调节成功" : "音量调节成功")
+        let remaining = Set(EdgeScrollTutorialStep.allCases).subtracting(completedEdgeScrollSteps)
+        if remaining.isEmpty {
+            feedback = "左右边缘都已体验，教程完成"
+            scheduleMove(to: .finish, delay: .milliseconds(1_000))
+        } else if remaining.contains(.brightness) {
+            feedback = "音量调节成功。再到屏幕最左侧滚动，调整亮度"
+        } else {
+            feedback = "亮度调节成功。再到屏幕最右侧滚动，调整音量"
         }
     }
 
@@ -665,6 +700,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         if self.page == .pinnedImage { cleanupTutorialPinnedImage() }
         waitingForSearchReturn = false
         self.page = page
+        tutorialConfiguration.edgeScrollOptions.enabled = page == .edgeScroll
         switch page {
         case .welcome: step = .welcome
         case .editing: step = .copy
@@ -672,10 +708,12 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .windows: step = .closeWindow
         case .pinnedImage: step = .createPin
         case .ocr: step = .recognizeText
+        case .edgeScroll: step = .edgeScroll
         case .finish: step = .finish
         }
         feedback = nil
         if page == .pinnedImage { completedPinnedImageSteps = [] }
+        if page == .edgeScroll { completedEdgeScrollSteps = [] }
         prepareCurrentStep()
     }
 
@@ -718,6 +756,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .recognizeText:
             recognizedText = nil
             feedback = "用逆时针方框圈住示例文字"
+        case .edgeScroll:
+            feedback = "先把光标移到屏幕最左侧或最右侧，再滚动鼠标滚轮或用触控板双指滚动"
         default:
             break
         }
@@ -1020,6 +1060,7 @@ private struct TutorialView: View {
         case .windows: windowPage
         case .pinnedImage: pinnedImagePage
         case .ocr: ocrPage
+        case .edgeScroll: edgeScrollPage
         case .finish: finishPage
         }
     }
@@ -1260,6 +1301,67 @@ private struct TutorialView: View {
                         .foregroundStyle(.green)
                 }
             }
+        }
+    }
+
+    private var edgeScrollPage: some View {
+        taskLayout {
+            VStack(spacing: 18) {
+                HStack(spacing: 18) {
+                    edgeScrollCard(
+                        step: .brightness,
+                        icon: "sun.max.fill",
+                        accent: .orange,
+                        edgeLabel: "最左侧"
+                    )
+                    edgeScrollCard(
+                        step: .volume,
+                        icon: "speaker.wave.2.fill",
+                        accent: .blue,
+                        edgeLabel: "最右侧"
+                    )
+                }
+                Text("把光标贴到屏幕边缘，然后滚动鼠标滚轮或在触控板上双指滚动。调节会真实生效，两个边缘各体验一次即可。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private func edgeScrollCard(
+        step: EdgeScrollTutorialStep,
+        icon: String,
+        accent: Color,
+        edgeLabel: String
+    ) -> some View {
+        let completed = coordinator.completedEdgeScrollSteps.contains(step)
+        return VStack(spacing: 14) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: icon)
+                    .font(.system(size: 48))
+                    .foregroundStyle(accent)
+                    .frame(maxWidth: .infinity, minHeight: 70)
+                if completed {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.green)
+                }
+            }
+            Text(edgeLabel)
+                .font(.title2.weight(.bold))
+            Text(step == .brightness ? "滚动调整屏幕亮度" : "滚动调整系统音量")
+                .foregroundStyle(.secondary)
+            Text(completed ? "已完成 ✅" : "等待操作")
+                .font(.headline)
+                .foregroundStyle(completed ? Color.green : Color.accentColor)
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity)
+        .background(accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(completed ? Color.green.opacity(0.6) : accent.opacity(0.25), lineWidth: 1.5)
         }
     }
 
