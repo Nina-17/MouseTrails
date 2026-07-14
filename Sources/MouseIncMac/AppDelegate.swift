@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let customGestureRecorder = CustomGestureRecordingController()
     private let updateCoordinator = UpdateCoordinator()
     private let permissionAuthorizationCoordinator = PermissionAuthorizationCoordinator()
+    private let tutorialCoordinator = TutorialCoordinator()
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
@@ -26,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         permissionAuthorizationCoordinator.onSnapshotChange = { [weak self] _ in
             self?.updatePermissionMenus()
+        }
+        tutorialCoordinator.onClose = { [weak self] in
+            self?.restoreBackgroundActivationPolicy()
         }
         launchAtLogin.onStateChange = { [weak self] _ in
             self?.updateLaunchAtLoginMenuItem()
@@ -64,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onGesture = { [weak self] result in
             self?.lastGestureItem?.title = "最近手势：\(result)"
         }
+        monitor.practiceGestureHandler = { [weak self] identifier in
+            self?.tutorialCoordinator.handleRecognizedGesture(identifier) ?? false
+        }
         self.monitor = monitor
 
         if AccessibilityPermission.isReady {
@@ -73,6 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             updatePermissionMenus()
         }
         updateCoordinator.start()
+        if tutorialCoordinator.shouldPresentOnLaunch {
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { return }
+                self?.showTutorial()
+            }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -284,6 +298,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func restoreBackgroundActivationPolicy() {
+        guard settingsWindowController?.window?.isVisible != true,
+              tutorialCoordinator.window?.isVisible != true else { return }
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
@@ -432,10 +448,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 launchAtLogin: launchAtLogin,
                 updateCoordinator: updateCoordinator,
                 permissionAuthorizationCoordinator: permissionAuthorizationCoordinator,
+                tutorialCoordinator: tutorialCoordinator,
                 closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
             )
         }
         settingsWindowController?.show(configuration: configuration, page: page)
+    }
+
+    private func showTutorial() {
+        activateForSettings()
+        tutorialCoordinator.show(
+            configuration: configuration,
+            permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
+        )
     }
 
     @objc private func reloadConfiguration() {

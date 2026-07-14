@@ -19,6 +19,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         launchAtLogin: LaunchAtLoginController,
         updateCoordinator: UpdateCoordinator,
         permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator,
+        tutorialCoordinator: TutorialCoordinator,
         closeHandler: @escaping @MainActor () -> Void = {}
     ) {
         self.closeHandler = closeHandler
@@ -37,7 +38,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
                 navigation: navigation,
                 launchAtLogin: launchAtLogin,
                 updateCoordinator: updateCoordinator,
-                permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
+                permissionAuthorizationCoordinator: permissionAuthorizationCoordinator,
+                tutorialCoordinator: tutorialCoordinator
             )
         )
         let window = NSWindow(contentViewController: hostingController)

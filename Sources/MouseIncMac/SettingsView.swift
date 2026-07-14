@@ -10,6 +10,7 @@ struct SettingsView: View {
     @ObservedObject var launchAtLogin: LaunchAtLoginController
     @ObservedObject var updateCoordinator: UpdateCoordinator
     @ObservedObject var permissionAuthorizationCoordinator: PermissionAuthorizationCoordinator
+    @ObservedObject var tutorialCoordinator: TutorialCoordinator
     @State private var selectedBindingID: UUID?
 
     var body: some View {
@@ -62,6 +63,7 @@ struct SettingsView: View {
         case .general:
             Form {
                 gestureSection
+                tutorialSection
                 updateSection
                 sequenceSection
             }
@@ -74,12 +76,6 @@ struct SettingsView: View {
         case .permissions:
             Form { permissionSection }
                 .formStyle(.grouped)
-        case .pinnedImage:
-            Form {
-                pinnedImageHelpSection
-                ocrHelpSection
-            }
-            .formStyle(.grouped)
         case .data:
             Form {
                 configurationFilesSection
@@ -148,6 +144,24 @@ struct SettingsView: View {
                 Text("继续执行").tag(ActionSequenceOptions.FailurePolicy.continueSequence)
             }
             numberField("最大延时（秒）", value: $model.draft.actionSequenceOptions.maximumDelay)
+        }
+    }
+
+    private var tutorialSection: some View {
+        Section("使用教程") {
+            LabeledContent {
+                Button("查看使用教程…") {
+                    tutorialCoordinator.show(
+                        configuration: model.draft,
+                        permissionAuthorizationCoordinator: permissionAuthorizationCoordinator
+                    )
+                }
+            } label: {
+                Label("交互式手势教学", systemImage: "graduationcap")
+            }
+            Text("重新练习默认手势，并单独查看贴图与 OCR 的操作方法。教程练习不会执行实际动作。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -579,25 +593,6 @@ struct SettingsView: View {
         }
     }
 
-    private var pinnedImageHelpSection: some View {
-        Section("贴图操作") {
-            Text("左键拖动；单击折叠或恢复；展开时右键关闭")
-            Text("光标停在贴图上时，滚轮或触控板双指滑动可调整透明度（20%–100%）")
-            Text("展开并选中贴图后，Command+C 可复制图像或在 Finder 中粘贴 PNG；缩小状态右键可另存为 PNG")
-        }
-    }
-
-    private var ocrHelpSection: some View {
-        Section("离线 OCR") {
-            Label("根据手势轨迹的包围范围直接截图识别", systemImage: "viewfinder")
-            Label("识别结果自动复制到剪贴板", systemImage: "doc.on.clipboard")
-            Label("完成后通过系统通知显示文本摘要", systemImage: "bell")
-            Text("OCR 使用 macOS 本地视觉识别，不上传截图或文字。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     @ViewBuilder
     private func permissionRow(_ permission: SystemPermission, required: Bool) -> some View {
         let state = permissionAuthorizationCoordinator.snapshot[permission]
@@ -887,7 +882,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case general
     case bindings
     case edgeScroll
-    case pinnedImage
     case permissions
     case data
 
@@ -899,7 +893,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .bindings: return "手势绑定"
         case .edgeScroll: return "边缘滚动"
         case .permissions: return "权限"
-        case .pinnedImage: return "贴图与 OCR"
         case .data: return "配置"
         }
     }
@@ -910,7 +903,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .bindings: return "管理轨迹、应用范围和执行动作"
         case .edgeScroll: return "左侧亮度与右侧音量控制"
         case .permissions: return "查看辅助功能、屏幕录制和输入监控状态"
-        case .pinnedImage: return "贴图交互与离线文字识别说明"
         case .data: return "导出、恢复并检查当前配置"
         }
     }
@@ -921,7 +913,6 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .bindings: return "scribble.variable"
         case .edgeScroll: return "arrow.up.and.down.and.arrow.left.and.right"
         case .permissions: return "lock.shield"
-        case .pinnedImage: return "pin"
         case .data: return "externaldrive"
         }
     }
