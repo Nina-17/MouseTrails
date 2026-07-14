@@ -85,7 +85,7 @@ final class PermissionAuthorizationCoordinator: NSObject, ObservableObject, NSWi
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
         panel.isReleasedWhenClosed = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         positionAssistantPanel(panel)
