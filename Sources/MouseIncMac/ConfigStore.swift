@@ -21,10 +21,15 @@ enum ConfigStoreError: LocalizedError {
 struct ConfigStore {
     let fileURL: URL
     private let fileManager: FileManager
+    private let bundledDefaultConfigurationURL: URL?
     private let migrationObserver: @MainActor (Int, Int) -> Void
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
+        bundledDefaultConfigurationURL = Bundle.main.url(
+            forResource: "default-config",
+            withExtension: "json"
+        )
         migrationObserver = { oldVersion, newVersion in
             DiagnosticLogger.shared.log(
                 "Configuration migrated from schema \(oldVersion) to \(newVersion)"
@@ -39,16 +44,18 @@ struct ConfigStore {
     init(
         fileURL: URL,
         fileManager: FileManager = .default,
+        bundledDefaultConfigurationURL: URL? = nil,
         migrationObserver: @escaping @MainActor (Int, Int) -> Void = { _, _ in }
     ) {
         self.fileURL = fileURL
         self.fileManager = fileManager
+        self.bundledDefaultConfigurationURL = bundledDefaultConfigurationURL
         self.migrationObserver = migrationObserver
     }
 
     func loadOrCreate() throws -> AppConfiguration {
         if !fileManager.fileExists(atPath: fileURL.path) {
-            let defaultConfiguration = AppConfiguration()
+            let defaultConfiguration = try bundledDefaultConfiguration()
             try save(defaultConfiguration)
             return defaultConfiguration
         }
@@ -105,6 +112,18 @@ struct ConfigStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(configuration)
+    }
+
+    private func bundledDefaultConfiguration() throws -> AppConfiguration {
+        guard let bundledDefaultConfigurationURL else {
+            return AppConfiguration()
+        }
+        let configuration = try JSONDecoder().decode(
+            AppConfiguration.self,
+            from: Data(contentsOf: bundledDefaultConfigurationURL)
+        )
+        try validate(configuration)
+        return configuration
     }
 
     private func configurationVersion(in data: Data) -> Int? {

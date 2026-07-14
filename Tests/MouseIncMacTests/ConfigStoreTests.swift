@@ -5,7 +5,7 @@ import XCTest
 
 @MainActor
 final class ConfigStoreTests: XCTestCase {
-    func testCreatesDefaultSchemaThreeConfiguration() throws {
+    func testCreatesDefaultConfiguration() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
 
@@ -14,6 +14,30 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
         XCTAssertTrue(configuration.validate().isValid)
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.fileURL.path))
+    }
+
+    func testCreatesConfigurationFromBundledDefault() throws {
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let bundledDefaultURL = repositoryRoot
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("default-config.json")
+        let fixture = try Fixture(bundledDefaultConfigurationURL: bundledDefaultURL)
+        defer { fixture.remove() }
+
+        let configuration = try fixture.store.loadOrCreate()
+        let expected = try JSONDecoder().decode(
+            AppConfiguration.self,
+            from: Data(contentsOf: bundledDefaultURL)
+        )
+
+        XCTAssertEqual(configuration, expected)
+        XCTAssertEqual(configuration.bindings.count, 13)
+        XCTAssertEqual(configuration.customGestures.count, 1)
+        XCTAssertTrue(configuration.edgeScrollOptions.enabled)
+        XCTAssertEqual(configuration.gestureOptions.trailColor.green, 0.9399358630180359)
     }
 
     func testMigratesSchemaTwoAndPreservesBackup() throws {
@@ -96,12 +120,15 @@ private struct Fixture {
     let fileURL: URL
     let store: ConfigStore
 
-    init() throws {
+    init(bundledDefaultConfigurationURL: URL? = nil) throws {
         directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("MouseIncMacTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         fileURL = directoryURL.appendingPathComponent("config.json")
-        store = ConfigStore(fileURL: fileURL)
+        store = ConfigStore(
+            fileURL: fileURL,
+            bundledDefaultConfigurationURL: bundledDefaultConfigurationURL
+        )
     }
 
     func remove() {

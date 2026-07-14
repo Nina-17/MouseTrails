@@ -18,6 +18,7 @@ cp "$ROOT/.build/release/MouseIncMac" "$MACOS/MouseIncMac"
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 mkdir -p "$RESOURCES"
 cp "$ROOT/Resources/MouseTrails.icns" "$RESOURCES/MouseTrails.icns"
+cp "$ROOT/Resources/default-config.json" "$RESOURCES/default-config.json"
 
 if command -v codesign >/dev/null 2>&1; then
     IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
