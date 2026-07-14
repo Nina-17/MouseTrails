@@ -175,6 +175,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsItem.target = self
         menu.addItem(settingsItem)
 
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(
+            title: "退出 MouseTrails",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        quitItem.target = NSApplication.shared
+        menu.addItem(quitItem)
+
         statusItem.menu = menu
         statusItem.autosaveName = "MouseIncMac.StatusItem"
         statusItem.isVisible = true
