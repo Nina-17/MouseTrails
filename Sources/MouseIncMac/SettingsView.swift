@@ -814,7 +814,6 @@ struct SettingsView: View {
         [
             ("SQUARE_CLOCKWISE", "顺时针方框"),
             ("SQUARE_COUNTERCLOCKWISE", "逆时针方框"),
-            ("LETTER_S", "字母 S"),
             ("LETTER_W", "字母 W")
         ]
     }

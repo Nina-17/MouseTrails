@@ -57,11 +57,6 @@ private func runChecks() throws {
     ]
     try check("corner", recognizer.recognize(corner), equals: "DOWN-RIGHT")
     try check("tiny", recognizer.recognize([.init(x: 0, y: 0), .init(x: 3, y: 2)]), equals: nil)
-    let letterS = GestureTemplate.builtIns.first { $0.identifier == "LETTER_S" }!.points.map {
-        CGPoint(x: $0.x * 100, y: $0.y * 100)
-    }
-    try check("letter S template", recognizer.recognize(letterS), equals: "LETTER_S")
-
     let global = GestureBinding(
         gesture: "UP",
         name: "Global",

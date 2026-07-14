@@ -330,6 +330,40 @@ final class GestureMonitor: NSObject {
                 minimumGestureLength: options.minimumGestureLength
             )
             let fixedGesture = recognizer.recognize(points)
+            let applicableCustomGestures = configuration.customGestures.filter {
+                configuration.binding(
+                    for: $0.identifier,
+                    bundleIdentifier: targetBundleIdentifier
+                ) != nil
+            }
+            let customMatch = CustomGestureRecognizer(
+                definitions: applicableCustomGestures
+            ).recognize(points)
+            if let customMatch {
+                let customTutorialDecision = practiceGestureHandler?(customMatch.identifier) ?? .notHandled
+                if customTutorialDecision == .consume {
+                    logger.info("Custom gesture consumed by tutorial: \(customMatch.identifier, privacy: .public)")
+                    DiagnosticLogger.shared.log(
+                        "Custom gesture consumed by tutorial: \(customMatch.identifier)"
+                    )
+                    onGesture?("\(customMatch.identifier) · 教程练习")
+                    break
+                }
+                if customTutorialDecision == .execute,
+                   let binding = configuration.binding(
+                       for: customMatch.identifier,
+                       bundleIdentifier: targetBundleIdentifier
+                   ) {
+                    execute(
+                        binding: binding,
+                        identifier: customMatch.identifier,
+                        points: points,
+                        configuration: configuration
+                    )
+                    break
+                }
+            }
+
             let tutorialDecision = practiceGestureHandler?(fixedGesture) ?? .notHandled
             if tutorialDecision == .consume {
                 let result = fixedGesture ?? "未识别"
@@ -338,6 +372,7 @@ final class GestureMonitor: NSObject {
                 onGesture?("\(result) · 教程练习")
                 break
             }
+
             if let fixedGesture,
                let binding = configuration.binding(
                    for: fixedGesture,
@@ -352,15 +387,7 @@ final class GestureMonitor: NSObject {
                 break
             }
 
-            let applicableCustomGestures = configuration.customGestures.filter {
-                configuration.binding(
-                    for: $0.identifier,
-                    bundleIdentifier: targetBundleIdentifier
-                ) != nil
-            }
-            if let customMatch = CustomGestureRecognizer(
-                definitions: applicableCustomGestures
-            ).recognize(points),
+            if let customMatch,
                let binding = configuration.binding(
                    for: customMatch.identifier,
                    bundleIdentifier: targetBundleIdentifier

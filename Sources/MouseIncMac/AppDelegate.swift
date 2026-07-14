@@ -9,7 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let customGestureRecorder = CustomGestureRecordingController()
     private let updateCoordinator = UpdateCoordinator()
     private let permissionAuthorizationCoordinator = PermissionAuthorizationCoordinator()
-    private let tutorialCoordinator = TutorialCoordinator()
+    private lazy var tutorialCoordinator = TutorialCoordinator(
+        customGestureRecorder: customGestureRecorder
+    )
     private var configuration = AppConfiguration()
     private var statusItem: NSStatusItem?
     private var enabledItem: NSMenuItem?
@@ -30,6 +32,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         tutorialCoordinator.onClose = { [weak self] in
             self?.restoreBackgroundActivationPolicy()
+        }
+        tutorialCoordinator.persistCustomSearchGesture = { [weak self] definition, binding in
+            guard let self else { throw CocoaError(.userCancelled) }
+            let updated = TutorialCoordinator.installingSearchGesture(
+                definition,
+                binding: binding,
+                in: self.configuration
+            )
+            try self.configStore.save(updated)
+            self.configuration = updated
+            self.settingsWindowController?.reload(configuration: updated)
+            self.updateEnabledMenuItem()
+            self.updatePermissionMenus()
+            self.lastGestureItem?.title = "最近手势：自定义搜索手势已保存"
         }
         launchAtLogin.onStateChange = { [weak self] _ in
             self?.updateLaunchAtLoginMenuItem()

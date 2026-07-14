@@ -85,17 +85,6 @@
     {
       "actions": [
         {
-          "type": "searchSelectedText",
-          "value": "https://www.google.com/search?q={query}"
-        }
-      ],
-      "bundleIdentifiers": [],
-      "gesture": "LETTER_S",
-      "name": "搜索选中文字"
-    },
-    {
-      "actions": [
-        {
           "type": "windowAction",
           "value": "maximize"
         }

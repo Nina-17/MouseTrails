@@ -62,13 +62,16 @@ struct ConfigStore {
 
         let data = try Data(contentsOf: fileURL)
         let storedVersion = configurationVersion(in: data)
-        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+        let decodedConfiguration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+        let configuration = removingLegacyBuiltInS(from: decodedConfiguration)
         try validate(configuration)
 
         if storedVersion != AppConfiguration.currentSchemaVersion {
             try preservePreMigrationConfiguration(data, schemaVersion: storedVersion ?? 1)
             try save(configuration)
             migrationObserver(storedVersion ?? 1, AppConfiguration.currentSchemaVersion)
+        } else if configuration != decodedConfiguration {
+            try save(configuration)
         }
 
         return configuration
@@ -93,7 +96,9 @@ struct ConfigStore {
 
     func restore(from sourceURL: URL) throws -> AppConfiguration {
         let sourceData = try Data(contentsOf: sourceURL)
-        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: sourceData)
+        let configuration = removingLegacyBuiltInS(
+            from: try JSONDecoder().decode(AppConfiguration.self, from: sourceData)
+        )
         try validate(configuration)
 
         if fileManager.fileExists(atPath: fileURL.path) {
@@ -112,6 +117,14 @@ struct ConfigStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return try encoder.encode(configuration)
+    }
+
+    private func removingLegacyBuiltInS(from source: AppConfiguration) -> AppConfiguration {
+        var configuration = source
+        configuration.bindings.removeAll {
+            $0.gesture.caseInsensitiveCompare("LETTER_S") == .orderedSame
+        }
+        return configuration
     }
 
     private func bundledDefaultConfiguration() throws -> AppConfiguration {

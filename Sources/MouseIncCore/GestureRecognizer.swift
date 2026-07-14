@@ -15,7 +15,7 @@ public struct GestureRecognizer: Sendable {
         }
 
         if let template = GestureTemplateRecognizer(minimumScore: 0.70).recognize(points),
-           template.identifier == "LETTER_S" || template.identifier == "LETTER_W" {
+           template.identifier == "LETTER_W" {
             return template.identifier
         }
 

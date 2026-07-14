@@ -71,6 +71,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
+    func reload(configuration: AppConfiguration) {
+        model.reload(configuration)
+    }
+
     func windowWillClose(_ notification: Notification) {
         if model.customGestureRecorder.isRecording {
             model.customGestureRecorder.cancel()

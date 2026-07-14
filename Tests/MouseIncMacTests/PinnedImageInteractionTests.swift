@@ -2,6 +2,26 @@ import XCTest
 @testable import MouseIncMac
 
 final class PinnedImageInteractionTests: XCTestCase {
+    func testPinnedImageFilenameUsesLocalTimeToTheSecond() throws {
+        let utc = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let local = try XCTUnwrap(TimeZone(secondsFromGMT: 8 * 60 * 60))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = utc
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 7,
+            day: 14,
+            hour: 9,
+            minute: 8,
+            second: 7
+        )))
+
+        XCTAssertEqual(
+            PinnedImageFileNaming.filename(at: date, timeZone: local),
+            "MouseTrails-贴图-2026-07-14-17-08-07.png"
+        )
+    }
+
     func testCompactToggleRestoresExpandedFrame() {
         let original = CGRect(x: 100, y: 200, width: 400, height: 240)
         var state = PinnedImageInteractionState(frame: original)

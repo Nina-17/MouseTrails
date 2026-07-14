@@ -9,6 +9,14 @@ final class TutorialCoordinatorTests: XCTestCase {
     func testEditingAndBrowsingTasksAdvanceOnlyAfterRealResults() async throws {
         let (coordinator, defaults, suiteName) = try makeCoordinator()
         defer { defaults.removePersistentDomain(forName: suiteName) }
+        var persistedConfiguration: AppConfiguration?
+        coordinator.persistCustomSearchGesture = { definition, binding in
+            persistedConfiguration = TutorialCoordinator.installingSearchGesture(
+                definition,
+                binding: binding,
+                in: AppConfiguration()
+            )
+        }
 
         XCTAssertTrue(coordinator.shouldPresentOnLaunch)
         XCTAssertEqual(coordinator.handleRecognizedGesture("UP"), .notHandled)
@@ -42,9 +50,33 @@ final class TutorialCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(coordinator.handleRecognizedGesture("RIGHT"), .consume)
         try await Task.sleep(for: .milliseconds(800))
-        XCTAssertEqual(coordinator.expectedGestureIdentifier, "LETTER_S")
+        XCTAssertTrue(coordinator.isPreparingCustomSearchGesture)
+        XCTAssertNil(coordinator.expectedGestureIdentifier)
 
-        XCTAssertEqual(coordinator.handleRecognizedGesture("LETTER_S"), .execute)
+        coordinator.startCustomSearchGestureRecording()
+        let sample = [
+            CGPoint(x: 100, y: 100), CGPoint(x: 25, y: 92),
+            CGPoint(x: 5, y: 72), CGPoint(x: 52, y: 50),
+            CGPoint(x: 96, y: 30), CGPoint(x: 72, y: 8), CGPoint(x: 0, y: 0)
+        ]
+        XCTAssertTrue(coordinator.customGestureRecorder.consume(points: sample))
+        XCTAssertTrue(coordinator.customGestureRecorder.consume(points: sample.map {
+            CGPoint(x: $0.x * 1.05, y: $0.y * 0.95)
+        }))
+        XCTAssertTrue(coordinator.customGestureRecorder.consume(points: sample.map {
+            CGPoint(x: $0.x + 18, y: $0.y - 12)
+        }))
+
+        let customSearchGesture = try XCTUnwrap(coordinator.expectedGestureIdentifier)
+        XCTAssertTrue(customSearchGesture.hasPrefix(TutorialCoordinator.tutorialSearchGesturePrefix))
+        XCTAssertEqual(coordinator.handleRecognizedGesture("SQUARE_CLOCKWISE"), .consume)
+        XCTAssertEqual(persistedConfiguration?.customGestures.first?.identifier, customSearchGesture)
+        XCTAssertEqual(
+            persistedConfiguration?.binding(for: customSearchGesture, bundleIdentifier: nil)?.actions.first?.type,
+            .searchSelectedText
+        )
+
+        XCTAssertEqual(coordinator.handleRecognizedGesture(customSearchGesture), .execute)
         XCTAssertNil(coordinator.configurationForCurrentContext)
         coordinator.applicationDidBecomeActive()
         try await Task.sleep(for: .milliseconds(800))
@@ -54,6 +86,70 @@ final class TutorialCoordinatorTests: XCTestCase {
         coordinator.finish()
         XCTAssertFalse(coordinator.shouldPresentOnLaunch)
         XCTAssertFalse(coordinator.isPresenting)
+    }
+
+    func testInstallingTutorialSearchGestureReplacesOnlyTutorialAndLegacySearchBindings() throws {
+        let oldTutorial = try CustomGestureTrainer.train(
+            identifier: "CUSTOM_TUTORIAL_SEARCH_OLD",
+            name: "旧教程搜索",
+            rawSamples: Array(repeating: [
+                CGPoint(x: 0, y: 0), CGPoint(x: 50, y: 80), CGPoint(x: 100, y: 0)
+            ], count: 3)
+        ).definition
+        let manual = try CustomGestureTrainer.train(
+            identifier: "CUSTOM_MANUAL",
+            name: "用户手势",
+            rawSamples: Array(repeating: [
+                CGPoint(x: 0, y: 0), CGPoint(x: 40, y: 100), CGPoint(x: 100, y: 20)
+            ], count: 3)
+        ).definition
+        let replacement = try CustomGestureTrainer.train(
+            identifier: "CUSTOM_TUTORIAL_SEARCH_NEW",
+            name: "搜索选中文字",
+            rawSamples: Array(repeating: [
+                CGPoint(x: 100, y: 100), CGPoint(x: 0, y: 70),
+                CGPoint(x: 100, y: 30), CGPoint(x: 0, y: 0)
+            ], count: 3)
+        ).definition
+        let source = AppConfiguration(
+            customGestures: [oldTutorial, manual],
+            bindings: [
+                GestureBinding(
+                    gesture: oldTutorial.identifier,
+                    name: "旧教程搜索",
+                    actions: [.init(type: .searchSelectedText, value: "https://example.com?q={query}")]
+                ),
+                GestureBinding(
+                    gesture: manual.identifier,
+                    name: "用户手势",
+                    actions: [.init(type: .keyStroke, value: "Command+C")]
+                ),
+                GestureBinding(
+                    gesture: "LETTER_S",
+                    name: "旧内置搜索",
+                    actions: [.init(type: .searchSelectedText, value: "https://example.com?q={query}")]
+                )
+            ]
+        )
+        let binding = GestureBinding(
+            gesture: replacement.identifier,
+            name: "搜索选中文字",
+            actions: [.init(type: .searchSelectedText, value: "https://www.google.com/search?q={query}")]
+        )
+
+        let installed = TutorialCoordinator.installingSearchGesture(
+            replacement,
+            binding: binding,
+            in: source
+        )
+
+        XCTAssertEqual(
+            Set(installed.customGestures.map(\.identifier)),
+            Set([manual.identifier, replacement.identifier])
+        )
+        XCTAssertNotNil(installed.binding(for: manual.identifier, bundleIdentifier: nil))
+        XCTAssertNotNil(installed.binding(for: replacement.identifier, bundleIdentifier: nil))
+        XCTAssertNil(installed.binding(for: "LETTER_S", bundleIdentifier: nil))
     }
 
     func testTutorialConfigurationIsTemporaryAndExcludesQuitApplication() throws {

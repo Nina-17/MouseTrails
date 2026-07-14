@@ -14,7 +14,7 @@ final class ActionContractsTests: XCTestCase {
     func testCloseAllWindowActionIsSupported() {
         let configuration = AppConfiguration(bindings: [
             GestureBinding(
-                gesture: "LETTER_S",
+                gesture: "DOWN-LEFT",
                 name: "关闭所有类似窗口",
                 actions: [.init(type: .windowAction, value: WindowAction.closeAll.rawValue)]
             )

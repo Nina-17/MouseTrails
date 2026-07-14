@@ -34,7 +34,10 @@ final class ConfigStoreTests: XCTestCase {
         )
 
         XCTAssertEqual(configuration, expected)
-        XCTAssertEqual(configuration.bindings.count, 11)
+        XCTAssertEqual(configuration.bindings.count, 10)
+        XCTAssertFalse(configuration.bindings.contains {
+            $0.gesture.caseInsensitiveCompare("LETTER_S") == .orderedSame
+        })
         XCTAssertFalse(configuration.bindings.contains { binding in
             binding.actions.contains {
                 $0.type == .windowAction && $0.value == WindowAction.quitApplication.rawValue
@@ -43,6 +46,28 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertTrue(configuration.customGestures.isEmpty)
         XCTAssertTrue(configuration.edgeScrollOptions.enabled)
         XCTAssertEqual(configuration.gestureOptions.trailColor.green, 0.9399358630180359)
+    }
+
+    func testRemovesLegacyBuiltInSBindingWhenLoading() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        var legacy = AppConfiguration()
+        legacy.bindings.append(GestureBinding(
+            gesture: "LETTER_S",
+            name: "旧内置搜索",
+            actions: [.init(type: .searchSelectedText, value: "https://example.com?q={query}")]
+        ))
+        try JSONEncoder().encode(legacy).write(to: fixture.fileURL)
+
+        let loaded = try fixture.store.loadOrCreate()
+
+        XCTAssertFalse(loaded.bindings.contains {
+            $0.gesture.caseInsensitiveCompare("LETTER_S") == .orderedSame
+        })
+        XCTAssertEqual(
+            try JSONDecoder().decode(AppConfiguration.self, from: Data(contentsOf: fixture.fileURL)),
+            loaded
+        )
     }
 
     func testMigratesSchemaTwoAndPreservesBackup() throws {

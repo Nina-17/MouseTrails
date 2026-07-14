@@ -7,6 +7,17 @@ import MouseIncCore
 import UniformTypeIdentifiers
 @preconcurrency import Vision
 
+enum PinnedImageFileNaming {
+    static func filename(at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        return "MouseTrails-贴图-\(formatter.string(from: date)).png"
+    }
+}
+
 @MainActor
 final class CaptureCoordinator: NSObject {
     var onPinnedImageInteraction: ((UUID, PinnedImageInteractionEvent) -> Void)?
@@ -664,7 +675,7 @@ private final class PinnedImageView: NSImageView {
             create: true
         ).appendingPathComponent("MouseIncMac/PinnedClipboard", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let url = root.appendingPathComponent("MouseTrails-贴图-\(UUID().uuidString).png")
+        let url = root.appendingPathComponent(PinnedImageFileNaming.filename())
         try data.write(to: url, options: .atomic)
         return url
     }
@@ -686,7 +697,7 @@ private final class PinnedImageView: NSImageView {
             .representation(using: .png, properties: [:]) else { return }
         let panel = NSSavePanel()
         panel.title = "保存贴图"
-        panel.nameFieldStringValue = "MouseTrails-贴图.png"
+        panel.nameFieldStringValue = PinnedImageFileNaming.filename()
         panel.allowedContentTypes = [.png]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
