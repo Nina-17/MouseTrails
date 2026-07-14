@@ -22,25 +22,56 @@ enum CloseAllWindowStrategy: Equatable {
 }
 
 enum WindowLayoutRegion: Equatable {
-    case fill
-    case left
-    case right
-    case top
-    case bottom
     case topLeft
     case topRight
     case bottomLeft
     case bottomRight
 }
 
+struct NativeWindowMenuCommand: Equatable {
+    let virtualKey: Int?
+    let modifiers: UInt32
+    let titles: [String]
+
+    static func forAction(_ action: WindowAction) -> Self? {
+        // AX menu shortcut modifiers omit the Fn/Globe key. Native window
+        // commands are exposed as Control + NoCommand plus their virtual key.
+        let modifiers: UInt32 = (1 << 2) | (1 << 3)
+        switch action {
+        case .fill:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Fill", "填充", "填滿"])
+        case .center:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Center", "居中", "置中"])
+        case .tileLeft:
+            return Self(virtualKey: 123, modifiers: modifiers, titles: ["Left", "左侧", "左側"])
+        case .tileRight:
+            return Self(virtualKey: 124, modifiers: modifiers, titles: ["Right", "右侧", "右側"])
+        case .tileTop:
+            return Self(virtualKey: 126, modifiers: modifiers, titles: ["Top", "顶部", "上方"])
+        case .tileBottom:
+            return Self(virtualKey: 125, modifiers: modifiers, titles: ["Bottom", "底部", "下方"])
+        case .tileTopLeft:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Top Left", "左上角", "左上方"])
+        case .tileTopRight:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Top Right", "右上角", "右上方"])
+        case .tileBottomLeft:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Bottom Left", "左下角", "左下方"])
+        case .tileBottomRight:
+            return Self(virtualKey: nil, modifiers: modifiers, titles: ["Bottom Right", "右下角", "右下方"])
+        case .restorePreviousSize:
+            return Self(
+                virtualKey: nil,
+                modifiers: modifiers,
+                titles: ["Return to Previous Size", "恢复到之前的大小", "回復成先前大小"]
+            )
+        default: return nil
+        }
+    }
+}
+
 struct WindowLayoutCalculator {
     static func regions(for action: WindowAction) -> [WindowLayoutRegion]? {
         switch action {
-        case .fill: return [.fill]
-        case .tileLeft: return [.left]
-        case .tileRight: return [.right]
-        case .tileTop: return [.top]
-        case .tileBottom: return [.bottom]
         case .tileTopLeft: return [.topLeft]
         case .tileTopRight: return [.topRight]
         case .tileBottomLeft: return [.bottomLeft]
@@ -57,16 +88,6 @@ struct WindowLayoutCalculator {
         let halfWidth = bounds.width / 2
         let halfHeight = bounds.height / 2
         switch region {
-        case .fill:
-            return bounds
-        case .left:
-            return CGRect(x: bounds.minX, y: bounds.minY, width: halfWidth, height: bounds.height)
-        case .right:
-            return CGRect(x: bounds.midX, y: bounds.minY, width: halfWidth, height: bounds.height)
-        case .top:
-            return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width, height: halfHeight)
-        case .bottom:
-            return CGRect(x: bounds.minX, y: bounds.midY, width: bounds.width, height: halfHeight)
         case .topLeft:
             return CGRect(x: bounds.minX, y: bounds.minY, width: halfWidth, height: halfHeight)
         case .topRight:
@@ -96,16 +117,17 @@ enum AccessibilityWindowActions {
 
     static func perform(_ action: WindowAction) -> Bool {
         switch action {
-        case .center:
-            return centerFrontmostWindow()
+        case .center, .fill, .tileLeft, .tileRight, .tileTop, .tileBottom:
+            return performNativeWindowMenuCommand(action)
         case .maximize:
-            return toggleFullScreen()
-        case .fill,
-             .tileLeft, .tileRight, .tileTop, .tileBottom,
-             .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight:
-            return applyLayout(action)
+            return performNativeFullScreenMenuCommand()
+        case .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight:
+            return performNativeWindowMenuCommand(action) || applyLayout(action)
         case .restorePreviousSize:
-            return restorePreviousFrame()
+            if canRestoreSavedFrame() {
+                return restorePreviousFrame()
+            }
+            return performNativeWindowMenuCommand(action)
         case .minimize:
             return setBooleanAttribute(kAXMinimizedAttribute, value: true)
         case .close:
@@ -114,6 +136,166 @@ enum AccessibilityWindowActions {
             return sendCloseAllShortcut()
         case .quitApplication:
             return quitFrontmostApplication()
+        }
+    }
+
+    private static func performNativeWindowMenuCommand(_ action: WindowAction) -> Bool {
+        guard let application = NSWorkspace.shared.frontmostApplication,
+              let command = NativeWindowMenuCommand.forAction(action) else { return false }
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        guard let menuBar = elementAttribute(kAXMenuBarAttribute, from: applicationElement),
+              let windowMenu = findWindowMenu(in: menuBar),
+              let menuItem = findMenuItem(matching: command, in: windowMenu, depth: 0)
+        else {
+            DiagnosticLogger.shared.log(
+                "Native window menu command not found; action=\(action.rawValue); " +
+                "bundle=\(application.bundleIdentifier ?? "unknown")"
+            )
+            logMenuSnapshot(from: applicationElement, action: action)
+            return false
+        }
+        let result = AXUIElementPerformAction(menuItem, kAXPressAction as CFString)
+        if result != .success {
+            DiagnosticLogger.shared.log(
+                "Native window menu command failed; action=\(action.rawValue); " +
+                "AXError=\(result.rawValue)"
+            )
+        }
+        return result == .success
+    }
+
+    private static func findMenuItem(
+        matching command: NativeWindowMenuCommand,
+        in element: AXUIElement,
+        depth: Int
+    ) -> AXUIElement? {
+        guard depth <= 8 else { return nil }
+        let title = stringAttribute(kAXTitleAttribute, from: element)
+        let matchesTitle = title.map(command.titles.contains) ?? false
+        let matchesShortcut = command.virtualKey.map { virtualKey in
+            numberAttribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)?.intValue
+                == virtualKey &&
+            numberAttribute(kAXMenuItemCmdModifiersAttribute, from: element)?.uint32Value
+                == command.modifiers
+        } ?? false
+        if (matchesTitle || matchesShortcut),
+           booleanAttribute(kAXEnabledAttribute, from: element) != false {
+            return element
+        }
+        for child in elementArrayAttribute(kAXChildrenAttribute, from: element) {
+            if let match = findMenuItem(matching: command, in: child, depth: depth + 1) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private static func findWindowMenu(in menuBar: AXUIElement) -> AXUIElement? {
+        let knownTitles = ["Window", "窗口", "視窗", "ウインドウ", "윈도우"]
+        return elementArrayAttribute(kAXChildrenAttribute, from: menuBar).first { element in
+            guard let title = stringAttribute(kAXTitleAttribute, from: element) else { return false }
+            return knownTitles.contains(title)
+        }
+    }
+
+    private static func performNativeFullScreenMenuCommand() -> Bool {
+        guard let application = NSWorkspace.shared.frontmostApplication else { return false }
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        let titles = [
+            "Enter Full Screen", "Exit Full Screen",
+            "进入全屏幕", "退出全屏幕",
+            "進入全螢幕", "離開全螢幕",
+            "フルスクリーンにする", "フルスクリーンを解除"
+        ]
+        let identifiers = ["toggleFullScreen:", "enterFullScreenMode:", "exitFullScreenMode:"]
+        guard let menuBar = elementAttribute(kAXMenuBarAttribute, from: applicationElement),
+              let menuItem = findMenuItem(
+                  titles: titles,
+                  identifiers: identifiers,
+                  in: menuBar,
+                  depth: 0
+              )
+        else {
+            DiagnosticLogger.shared.log(
+                "Native full-screen menu command not found; " +
+                "bundle=\(application.bundleIdentifier ?? "unknown")"
+            )
+            return false
+        }
+        let result = AXUIElementPerformAction(menuItem, kAXPressAction as CFString)
+        if result != .success {
+            DiagnosticLogger.shared.log(
+                "Native full-screen menu command failed; AXError=\(result.rawValue)"
+            )
+        }
+        return result == .success
+    }
+
+    private static func findMenuItem(
+        titles: [String],
+        identifiers: [String],
+        in element: AXUIElement,
+        depth: Int
+    ) -> AXUIElement? {
+        guard depth <= 8 else { return nil }
+        let title = stringAttribute(kAXTitleAttribute, from: element)
+        let identifier = stringAttribute(kAXIdentifierAttribute, from: element)
+        if (title.map(titles.contains) == true || identifier.map(identifiers.contains) == true),
+           booleanAttribute(kAXEnabledAttribute, from: element) != false {
+            return element
+        }
+        for child in elementArrayAttribute(kAXChildrenAttribute, from: element) {
+            if let match = findMenuItem(
+                titles: titles,
+                identifiers: identifiers,
+                in: child,
+                depth: depth + 1
+            ) {
+                return match
+            }
+        }
+        return nil
+    }
+
+    private static func logMenuSnapshot(
+        from applicationElement: AXUIElement,
+        action: WindowAction
+    ) {
+        guard let menuBar = elementAttribute(kAXMenuBarAttribute, from: applicationElement) else {
+            DiagnosticLogger.shared.log("Window menu snapshot unavailable; action=\(action.rawValue)")
+            return
+        }
+        let snapshotRoot = findWindowMenu(in: menuBar) ?? menuBar
+        var lines: [String] = []
+        appendMenuSnapshot(of: snapshotRoot, depth: 0, remaining: 120, to: &lines)
+        DiagnosticLogger.shared.log(
+            "Window menu snapshot; action=\(action.rawValue); entries=\(lines.count)\n" +
+            lines.joined(separator: "\n")
+        )
+    }
+
+    private static func appendMenuSnapshot(
+        of element: AXUIElement,
+        depth: Int,
+        remaining: Int,
+        to lines: inout [String]
+    ) {
+        guard depth <= 8, lines.count < remaining else { return }
+        let children = elementArrayAttribute(kAXChildrenAttribute, from: element)
+        let title = stringAttribute(kAXTitleAttribute, from: element) ?? ""
+        let role = stringAttribute(kAXRoleAttribute, from: element) ?? ""
+        let identifier = stringAttribute(kAXIdentifierAttribute, from: element) ?? ""
+        let key = numberAttribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)?.stringValue ?? "-"
+        let modifiers = numberAttribute(kAXMenuItemCmdModifiersAttribute, from: element)?.stringValue ?? "-"
+        if !title.isEmpty || key != "-" {
+            lines.append(
+                "\(String(repeating: "  ", count: depth))" +
+                "title=\(title); role=\(role); id=\(identifier); " +
+                "key=\(key); modifiers=\(modifiers); children=\(children.count)"
+            )
+        }
+        for child in children {
+            appendMenuSnapshot(of: child, depth: depth + 1, remaining: remaining, to: &lines)
         }
     }
 
@@ -133,20 +315,6 @@ enum AccessibilityWindowActions {
         else { return false }
         keyDown.flags = [.maskCommand, .maskAlternate]
         keyUp.flags = [.maskCommand, .maskAlternate]
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
-        return true
-    }
-
-    private static func toggleFullScreen() -> Bool {
-        guard NSWorkspace.shared.frontmostApplication != nil else { return false }
-        let source = CGEventSource(stateID: .hidSystemState)
-        guard
-            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 3, keyDown: true),
-            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 3, keyDown: false)
-        else { return false }
-        keyDown.flags = [.maskCommand, .maskControl]
-        keyUp.flags = [.maskCommand, .maskControl]
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
         return true
@@ -175,27 +343,6 @@ enum AccessibilityWindowActions {
         ) == .success
     }
 
-    private static func centerFrontmostWindow() -> Bool {
-        guard
-            let window = focusedWindow(),
-            let currentFrame = frame(of: window),
-            let visibleBounds = quartzVisibleBounds(containing: CGPoint(
-                x: currentFrame.midX,
-                y: currentFrame.midY
-            ))
-        else {
-            return false
-        }
-
-        let target = CGRect(
-            x: visibleBounds.midX - currentFrame.width / 2,
-            y: visibleBounds.midY - currentFrame.height / 2,
-            width: currentFrame.width,
-            height: currentFrame.height
-        )
-        return applyFrames([target], to: [window])
-    }
-
     private static func applyLayout(_ action: WindowAction) -> Bool {
         guard
             let focusedWindow = focusedWindow(),
@@ -217,6 +364,11 @@ enum AccessibilityWindowActions {
         guard setFrame(target, for: window) else { return false }
         savedFrames.removeValue(forKey: identity)
         return true
+    }
+
+    private static func canRestoreSavedFrame() -> Bool {
+        guard let window = focusedWindow(), let identity = identity(for: window) else { return false }
+        return savedFrames[identity] != nil
     }
 
     private static func applyFrames(_ targets: [CGRect], to windows: [AXUIElement]) -> Bool {
@@ -342,6 +494,32 @@ enum AccessibilityWindowActions {
             return nil
         }
         return value as? NSNumber
+    }
+
+    private static func elementAttribute(
+        _ attribute: String,
+        from element: AXUIElement
+    ) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
+        return unsafeDowncast(value, to: AXUIElement.self)
+    }
+
+    private static func elementArrayAttribute(
+        _ attribute: String,
+        from element: AXUIElement
+    ) -> [AXUIElement] {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+              let values = value as? [Any]
+        else { return [] }
+        return values.compactMap { value in
+            guard CFGetTypeID(value as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
+            return unsafeDowncast(value as AnyObject, to: AXUIElement.self)
+        }
     }
 
     private static func setBooleanAttribute(

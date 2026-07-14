@@ -134,23 +134,5 @@ public struct GestureTemplateRecognizer: Sendable {
 }
 
 public extension GestureTemplate {
-    static let builtIns: [GestureTemplate] = [
-        GestureTemplate(identifier: "LETTER_W", points: polyline([
-            CGPoint(x: 0, y: 1), CGPoint(x: 0.25, y: 0), CGPoint(x: 0.5, y: 0.62),
-            CGPoint(x: 0.75, y: 0), CGPoint(x: 1, y: 1)
-        ]))
-    ]
-
-    private static func polyline(_ vertices: [CGPoint]) -> [CGPoint] {
-        zip(vertices, vertices.dropFirst()).flatMap { start, end in
-            (0..<20).map { index in
-                let fraction = Double(index) / 20
-                return CGPoint(
-                    x: start.x + fraction * (end.x - start.x),
-                    y: start.y + fraction * (end.y - start.y)
-                )
-            }
-        } + [vertices.last!]
-    }
-
+    static let builtIns: [GestureTemplate] = []
 }

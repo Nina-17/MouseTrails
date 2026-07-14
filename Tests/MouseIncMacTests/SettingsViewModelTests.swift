@@ -139,7 +139,7 @@ final class SettingsViewModelTests: XCTestCase {
 
     func testOrdersBindingsByGestureCategoryWithoutChangingConfigurationOrder() {
         let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
-            GestureBinding(gesture: "LETTER_W", name: "模板", actions: [.init(type: .keyStroke, value: "Command+C")]),
+            GestureBinding(gesture: "SQUARE_CLOCKWISE", name: "模板", actions: [.init(type: .keyStroke, value: "Command+C")]),
             GestureBinding(gesture: "DOWN-RIGHT", name: "折线", actions: [.init(type: .keyStroke, value: "Command+C")]),
             GestureBinding(gesture: "UP_RIGHT", name: "对角线", actions: [.init(type: .keyStroke, value: "Command+C")]),
             GestureBinding(gesture: "UP", name: "直线", actions: [.init(type: .keyStroke, value: "Command+C")]),
@@ -150,8 +150,8 @@ final class SettingsViewModelTests: XCTestCase {
             model.bindingIndex(for: id).flatMap { model.binding(at: $0)?.gesture }
         }
 
-        XCTAssertEqual(orderedGestures, ["UP", "UP_RIGHT", "DOWN-RIGHT", "LETTER_W", ""])
-        XCTAssertEqual(model.draft.bindings.map(\.gesture), ["LETTER_W", "DOWN-RIGHT", "UP_RIGHT", "UP", ""])
+        XCTAssertEqual(orderedGestures, ["UP", "UP_RIGHT", "DOWN-RIGHT", "SQUARE_CLOCKWISE", ""])
+        XCTAssertEqual(model.draft.bindings.map(\.gesture), ["SQUARE_CLOCKWISE", "DOWN-RIGHT", "UP_RIGHT", "UP", ""])
     }
 
     func testGestureCanBeSelectedForNewBinding() {

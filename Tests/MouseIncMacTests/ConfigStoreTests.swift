@@ -70,6 +70,28 @@ final class ConfigStoreTests: XCTestCase {
         )
     }
 
+    func testRemovesRetiredBuiltInWBindingWhenLoading() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        var legacy = AppConfiguration()
+        legacy.bindings.append(GestureBinding(
+            gesture: "LETTER_W",
+            name: "旧内置 W",
+            actions: [.init(type: .keyStroke, value: "Command+W")]
+        ))
+        try JSONEncoder().encode(legacy).write(to: fixture.fileURL)
+
+        let loaded = try fixture.store.loadOrCreate()
+
+        XCTAssertFalse(loaded.bindings.contains {
+            $0.gesture.caseInsensitiveCompare("LETTER_W") == .orderedSame
+        })
+        XCTAssertEqual(
+            try JSONDecoder().decode(AppConfiguration.self, from: Data(contentsOf: fixture.fileURL)),
+            loaded
+        )
+    }
+
     func testMigratesSchemaTwoAndPreservesBackup() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

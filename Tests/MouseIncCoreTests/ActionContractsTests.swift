@@ -27,7 +27,7 @@ final class ActionContractsTests: XCTestCase {
     func testQuitApplicationWindowActionIsSupported() {
         let configuration = AppConfiguration(bindings: [
             GestureBinding(
-                gesture: "LETTER_W",
+                gesture: "UP-RIGHT",
                 name: "退出当前应用",
                 actions: [.init(type: .windowAction, value: WindowAction.quitApplication.rawValue)]
             )

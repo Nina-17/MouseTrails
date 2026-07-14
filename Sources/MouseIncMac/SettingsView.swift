@@ -843,8 +843,7 @@ struct SettingsView: View {
     private var templateGestureChoices: [(String, String)] {
         [
             ("SQUARE_CLOCKWISE", "顺时针方框"),
-            ("SQUARE_COUNTERCLOCKWISE", "逆时针方框"),
-            ("LETTER_W", "字母 W")
+            ("SQUARE_COUNTERCLOCKWISE", "逆时针方框")
         ]
     }
 

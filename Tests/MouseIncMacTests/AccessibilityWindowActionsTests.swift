@@ -25,14 +25,9 @@ final class AccessibilityWindowActionsTests: XCTestCase {
         )
     }
 
-    func testSingleWindowLayoutsUseQuartzScreenCoordinates() throws {
+    func testCornerLayoutsUseQuartzScreenCoordinates() throws {
         let bounds = CGRect(x: 100, y: 50, width: 1_200, height: 800)
         let expected: [WindowAction: CGRect] = [
-            .fill: bounds,
-            .tileLeft: CGRect(x: 100, y: 50, width: 600, height: 800),
-            .tileRight: CGRect(x: 700, y: 50, width: 600, height: 800),
-            .tileTop: CGRect(x: 100, y: 50, width: 1_200, height: 400),
-            .tileBottom: CGRect(x: 100, y: 450, width: 1_200, height: 400),
             .tileTopLeft: CGRect(x: 100, y: 50, width: 600, height: 400),
             .tileTopRight: CGRect(x: 700, y: 50, width: 600, height: 400),
             .tileBottomLeft: CGRect(x: 100, y: 450, width: 600, height: 400),
@@ -48,11 +43,34 @@ final class AccessibilityWindowActionsTests: XCTestCase {
         }
     }
 
+    func testNativeWindowActionsUseMacOSMenuCommands() {
+        let modifiers: UInt32 = (1 << 2) | (1 << 3)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.fill)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.center)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileLeft)?.virtualKey, 123)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileRight)?.virtualKey, 124)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileTop)?.virtualKey, 126)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileBottom)?.virtualKey, 125)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileTopLeft)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileTopRight)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileBottomLeft)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.tileBottomRight)?.virtualKey, nil)
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.restorePreviousSize)?.virtualKey, nil)
+        XCTAssertTrue(NativeWindowMenuCommand.forAction(.fill)?.titles.contains("Fill") == true)
+        XCTAssertTrue(
+            NativeWindowMenuCommand.forAction(.restorePreviousSize)?.titles
+                .contains("Return to Previous Size") == true
+        )
+        XCTAssertEqual(NativeWindowMenuCommand.forAction(.fill)?.modifiers, modifiers)
+        XCTAssertTrue(NativeWindowMenuCommand.forAction(.tileTopLeft)?.titles.contains("Top Left") == true)
+    }
+
     func testNonLayoutActionsDoNotProduceLayoutFrames() {
         let bounds = CGRect(x: 0, y: 0, width: 800, height: 600)
         let nonLayoutActions: [WindowAction] = [
-            .center, .maximize, .restorePreviousSize, .minimize, .close, .closeAll,
-            .quitApplication
+            .center, .maximize, .fill, .restorePreviousSize,
+            .tileLeft, .tileRight, .tileTop, .tileBottom,
+            .minimize, .close, .closeAll, .quitApplication
         ]
         for action in nonLayoutActions {
             XCTAssertNil(WindowLayoutCalculator.frames(for: action, in: bounds))

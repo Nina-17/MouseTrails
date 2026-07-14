@@ -330,7 +330,7 @@ final class SettingsViewModel: ObservableObject {
             ["UP", "DOWN", "LEFT", "RIGHT"],
             ["UP_LEFT", "UP_RIGHT", "DOWN_LEFT", "DOWN_RIGHT"],
             ["UP-LEFT", "UP-RIGHT", "DOWN-LEFT", "DOWN-RIGHT", "LEFT-UP", "LEFT-DOWN", "RIGHT-UP", "RIGHT-DOWN"],
-            ["SQUARE_CLOCKWISE", "SQUARE_COUNTERCLOCKWISE", "LETTER_W"]
+            ["SQUARE_CLOCKWISE", "SQUARE_COUNTERCLOCKWISE"]
         ]
         for (category, identifiers) in categories.enumerated() {
             if let order = identifiers.firstIndex(of: identifier) {

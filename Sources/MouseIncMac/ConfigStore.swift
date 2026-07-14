@@ -63,7 +63,7 @@ struct ConfigStore {
         let data = try Data(contentsOf: fileURL)
         let storedVersion = configurationVersion(in: data)
         let decodedConfiguration = try JSONDecoder().decode(AppConfiguration.self, from: data)
-        let configuration = removingLegacyBuiltInS(from: decodedConfiguration)
+        let configuration = removingRetiredBuiltInLetters(from: decodedConfiguration)
         try validate(configuration)
 
         if storedVersion != AppConfiguration.currentSchemaVersion {
@@ -96,7 +96,7 @@ struct ConfigStore {
 
     func restore(from sourceURL: URL) throws -> AppConfiguration {
         let sourceData = try Data(contentsOf: sourceURL)
-        let configuration = removingLegacyBuiltInS(
+        let configuration = removingRetiredBuiltInLetters(
             from: try JSONDecoder().decode(AppConfiguration.self, from: sourceData)
         )
         try validate(configuration)
@@ -119,10 +119,13 @@ struct ConfigStore {
         return try encoder.encode(configuration)
     }
 
-    private func removingLegacyBuiltInS(from source: AppConfiguration) -> AppConfiguration {
+    private func removingRetiredBuiltInLetters(from source: AppConfiguration) -> AppConfiguration {
         var configuration = source
+        let retiredIdentifiers = ["LETTER_S", "LETTER_W"]
         configuration.bindings.removeAll {
-            $0.gesture.caseInsensitiveCompare("LETTER_S") == .orderedSame
+            binding in retiredIdentifiers.contains {
+                binding.gesture.caseInsensitiveCompare($0) == .orderedSame
+            }
         }
         return configuration
     }
