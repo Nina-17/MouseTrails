@@ -166,7 +166,7 @@ private struct PermissionDragAssistantView: View {
                     }
                     .help("按住并拖动 MouseTrails.app")
 
-                Text("如果列表中已有 MouseTrails，直接打开右侧开关。系统可能要求输入密码或重启应用。")
+                Text("如果列表中已有 MouseTrails，打开右侧开关；开关已开但仍未授权时，关开一次，仍无效则移除后重新拖入。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
