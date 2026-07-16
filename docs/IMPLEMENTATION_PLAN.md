@@ -23,9 +23,9 @@
 | P2-0 双轨共享契约 | 已完成 | 动作序列、权限协调、配置 schema 3、模块边界 | A/B 两轨可在不重复修改核心文件的情况下并行 |
 | P2A 输入与效率 | 已完成 | 手势扩展、三样本自定义训练、窗口/系统视图动作、边缘滚轮 | 固定手势优先，自定义手势具有阈值、候选分差和冲突提示 |
 | P2B 视觉与设置 | 已完成 | 分区式 SwiftUI 设置、截图、贴图、OCR、菜单栏与应用图标 | 已完成真机复验 |
-| P3 产品化与发布 | 部分完成 | 登录启动、Sparkle 更新、tag 驱动 DMG/appcast 发布 | 0.22.0 已发布；Developer ID 签名与 Apple 公证仍未完成 |
+| P3 产品化与发布 | 部分完成 | 登录启动、Sparkle 更新、tag 驱动 DMG/appcast 发布 | 0.23.0 待发布；Developer ID 签名与 Apple 公证仍未完成 |
 
-P0/P1 的基线提交为 `4741279`，当前开发版本为 `0.22.0 (59)`。
+P0/P1 的基线提交为 `4741279`，当前开发版本为 `0.23.0 (60)`。
 
 ## 2.1 暂挂任务清单
 
@@ -237,4 +237,4 @@ Sources/MouseIncMac/
 
 ### 当前状态
 
-自定义手势录制与训练已实现，搜索教程会引导用户创建真实自定义手势并写入配置。0.22.0 已发布并启用 Sparkle 更新链路：启动时每日低频检查、菜单与通用页手动检查、Ed25519 更新包验证、后台下载和退出后安装；tag 驱动的 GitHub Actions 会同时发布 DMG 与 GitHub Pages appcast。开发机安装脚本现要求 Apple Development 签名，避免 ad-hoc 签名随代码变动导致辅助功能和屏幕录制权限反复重授；公开 Release 仍为 ad-hoc DMG。Developer ID 签名与 Apple 公证仍属发布遗留。
+自定义手势录制与训练已实现，搜索教程会引导用户创建真实自定义手势并写入配置。0.23.0 将延续 Sparkle 更新链路：启动时每日低频检查、菜单与通用页手动检查、Ed25519 更新包验证、后台下载和退出后安装；tag 驱动的 GitHub Actions 会同时发布 DMG 与 GitHub Pages appcast。开发机安装脚本现要求 Apple Development 签名，避免 ad-hoc 签名随代码变动导致辅助功能和屏幕录制权限反复重授；公开 Release 仍为 ad-hoc DMG。Developer ID 签名与 Apple 公证仍属发布遗留。
