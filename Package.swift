@@ -11,11 +11,17 @@ let package = Package(
         .library(name: "MouseIncCore", targets: ["MouseIncCore"]),
         .executable(name: "MouseIncMac", targets: ["MouseIncMac"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")
+    ],
     targets: [
         .target(name: "MouseIncCore"),
         .executableTarget(
             name: "MouseIncMac",
-            dependencies: ["MouseIncCore"]
+            dependencies: [
+                "MouseIncCore",
+                .product(name: "Sparkle", package: "Sparkle")
+            ]
         ),
         .executableTarget(
             name: "MouseIncCoreCheck",

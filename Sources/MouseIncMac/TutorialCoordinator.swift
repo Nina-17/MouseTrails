@@ -1444,12 +1444,12 @@ private struct TutorialView: View {
                 Button("跳过教程") { coordinator.skip() }
                     .foregroundStyle(.secondary)
                 if coordinator.page != .welcome {
-                    Button("跳过本场景") { coordinator.skipCurrentScene() }
+                    Button("上一个场景") { coordinator.previousScene() }
                 }
             }
             Spacer()
-            if coordinator.page != .welcome {
-                Button("上一个场景") { coordinator.previousScene() }
+            if coordinator.page != .finish, coordinator.page != .welcome {
+                Button("跳过本场景") { coordinator.skipCurrentScene() }
             }
             if coordinator.page == .welcome {
                 Button("开始体验") { coordinator.nextFromWelcome() }

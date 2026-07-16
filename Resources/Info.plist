@@ -19,14 +19,24 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.21.0</string>
+    <string>0.22.0</string>
     <key>CFBundleVersion</key>
-    <string>58</string>
+    <string>59</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
-    <key>NSScreenCaptureUsageDescription</key>
-    <string>MouseTrails 的截图、贴图与 OCR 功能需要读取您选择的屏幕区域。</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>MouseTrails 的截图、贴图与 OCR 功能需要读取您选择的屏幕区域。</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://nina-17.github.io/MouseTrails/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>31owc2Mg0XB4pZxQRny3dGpiyc5vXYZaT7Pol2GBaJs=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

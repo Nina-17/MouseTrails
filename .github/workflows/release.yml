@@ -54,3 +54,45 @@ jobs:
             --verify-tag \
             --generate-notes \
             --title "MouseTrails ${version}"
+
+      - name: Download pinned Sparkle publishing tools
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error \
+            --output /tmp/Sparkle-2.9.4.tar.xz \
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.4/Sparkle-2.9.4.tar.xz
+          mkdir -p /tmp/sparkle-tools
+          tar -xJf /tmp/Sparkle-2.9.4.tar.xz -C /tmp/sparkle-tools --strip-components=1
+
+      - name: Generate signed Sparkle appcast
+        shell: bash
+        env:
+          SPARKLE_ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_ED25519_PRIVATE_KEY"
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          ./scripts/generate-appcast.sh \
+            dist \
+            /tmp/sparkle-tools/bin/generate_appcast \
+            "https://github.com/Nina-17/MouseTrails/releases/download/v${version}/"
+
+      - name: Publish appcast to GitHub Pages branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          test -f dist/appcast.xml
+          pages_dir=$(mktemp -d)
+          git -C "$pages_dir" init --initial-branch=gh-pages
+          git -C "$pages_dir" config user.name "github-actions[bot]"
+          git -C "$pages_dir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$pages_dir" remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git -C "$pages_dir" fetch origin gh-pages; then
+            git -C "$pages_dir" checkout -B gh-pages origin/gh-pages
+          fi
+          cp dist/appcast.xml "$pages_dir/appcast.xml"
+          git -C "$pages_dir" add appcast.xml
+          if ! git -C "$pages_dir" diff --cached --quiet; then
+            git -C "$pages_dir" commit -m "Publish appcast for ${GITHUB_REF_NAME}"
+            git -C "$pages_dir" push origin gh-pages
+          fi

@@ -170,10 +170,17 @@ struct SettingsView: View {
                 "自动检查更新",
                 isOn: $updateCoordinator.automaticallyChecksForUpdates
             )
+            Toggle(
+                "自动下载更新（退出时安装）",
+                isOn: $updateCoordinator.automaticallyDownloadsUpdates
+            )
+            .disabled(!updateCoordinator.automaticallyChecksForUpdates)
             LabeledContent("当前版本", value: updateCoordinator.currentVersionString)
             HStack {
-                Text(updateCoordinator.statusText)
-                    .foregroundStyle(.secondary)
+                if updateCoordinator.isBusy {
+                    Text("正在检查更新…")
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
                 if updateCoordinator.isBusy {
                     ProgressView()
@@ -184,7 +191,7 @@ struct SettingsView: View {
                 }
                 .disabled(updateCoordinator.isBusy)
             }
-            Text("每 24 小时最多自动检查一次。新版本来自公开 GitHub Releases，下载后由 macOS 打开 DMG，不会静默替换应用。")
+            Text("每 24 小时最多自动检查一次。更新包使用 Sparkle 的 Ed25519 签名验证，下载后会在退出并重新启动应用时完成替换。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
