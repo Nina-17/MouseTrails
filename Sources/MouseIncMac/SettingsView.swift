@@ -175,12 +175,10 @@ struct SettingsView: View {
                 isOn: $updateCoordinator.automaticallyDownloadsUpdates
             )
             .disabled(!updateCoordinator.automaticallyChecksForUpdates)
-            LabeledContent("当前版本", value: updateCoordinator.currentVersionString)
             HStack {
-                if updateCoordinator.isBusy {
-                    Text("正在检查更新…")
-                        .foregroundStyle(.secondary)
-                }
+                Text("当前版本：")
+                Text(updateCoordinator.currentVersionString)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if updateCoordinator.isBusy {
                     ProgressView()
