@@ -1,0 +1,16 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>MouseTrails</title>
+        <item>
+            <title>0.22.0</title>
+            <pubDate>Thu, 16 Jul 2026 08:16:24 +0000</pubDate>
+            <link>https://github.com/Nina-17/MouseTrails</link>
+            <sparkle:version>59</sparkle:version>
+            <sparkle:shortVersionString>0.22.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/Nina-17/MouseTrails/releases/download/v0.22.0/MouseTrails-0.22.0.dmg" length="4422362" type="application/octet-stream" sparkle:edSignature="jqFFTwNr9YKLPwzArLLUOUaxDkBpNcev2FX7GqRa2L16uAolcKVx+hxAYilVsBLA1tXsgNsHsARhihxjwdT1Cg=="/>
+        </item>
+    </channel>
+</rss>
