@@ -25,6 +25,30 @@ final class AccessibilityWindowActionsTests: XCTestCase {
         )
     }
 
+    func testOnlySteamSplitProcessUsesLogicalHideCloseFallback() {
+        XCTAssertEqual(
+            LogicalWindowCloseFallback.forApplications(
+                inputBundleIdentifier: "com.valvesoftware.steam.helper",
+                logicalBundleIdentifier: "com.valvesoftware.steam"
+            ),
+            .hideLogicalApplication
+        )
+        XCTAssertEqual(
+            LogicalWindowCloseFallback.forApplications(
+                inputBundleIdentifier: "zlibrary",
+                logicalBundleIdentifier: "zlibrary"
+            ),
+            .none
+        )
+        XCTAssertEqual(
+            LogicalWindowCloseFallback.forApplications(
+                inputBundleIdentifier: "com.example.helper",
+                logicalBundleIdentifier: "com.example.application"
+            ),
+            .none
+        )
+    }
+
     func testCornerLayoutsUseQuartzScreenCoordinates() throws {
         let bounds = CGRect(x: 100, y: 50, width: 1_200, height: 800)
         let expected: [WindowAction: CGRect] = [
@@ -75,5 +99,66 @@ final class AccessibilityWindowActionsTests: XCTestCase {
         for action in nonLayoutActions {
             XCTAssertNil(WindowLayoutCalculator.frames(for: action, in: bounds))
         }
+    }
+
+    func testFallbackLayoutCalculatesWholeAndHalfDesktopFrames() throws {
+        let bounds = CGRect(x: 0, y: 32, width: 1_470, height: 844)
+        let current = CGRect(x: 400, y: 200, width: 900, height: 600)
+
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.targetFrame(
+                for: .fill,
+                currentFrame: current,
+                in: bounds
+            )),
+            bounds
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.targetFrame(
+                for: .tileLeft,
+                currentFrame: current,
+                in: bounds
+            )),
+            CGRect(x: 0, y: 32, width: 735, height: 844)
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.targetFrame(
+                for: .tileBottom,
+                currentFrame: current,
+                in: bounds
+            )),
+            CGRect(x: 0, y: 454, width: 1_470, height: 422)
+        )
+    }
+
+    func testConstrainedFallbackKeepsAcceptedSizeAndRequestedEdge() throws {
+        let bounds = CGRect(x: 0, y: 32, width: 1_470, height: 844)
+        let steamMinimum = CGSize(width: 1_010, height: 600)
+        let zLibraryMinimum = CGSize(width: 1_100, height: 843)
+
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.anchoredFrame(
+                for: .tileLeft,
+                acceptedSize: steamMinimum,
+                in: bounds
+            )),
+            CGRect(x: 0, y: 32, width: 1_010, height: 600)
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.anchoredFrame(
+                for: .tileRight,
+                acceptedSize: zLibraryMinimum,
+                in: bounds
+            )),
+            CGRect(x: 370, y: 32, width: 1_100, height: 843)
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(WindowLayoutCalculator.anchoredFrame(
+                for: .tileBottom,
+                acceptedSize: zLibraryMinimum,
+                in: bounds
+            )),
+            CGRect(x: 0, y: 33, width: 1_100, height: 843)
+        )
     }
 }

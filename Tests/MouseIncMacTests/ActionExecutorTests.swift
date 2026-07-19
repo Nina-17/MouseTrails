@@ -75,18 +75,31 @@ final class ActionExecutorTests: XCTestCase {
 
     func testWindowActionUsesInjectedHandler() async throws {
         var receivedAction: WindowAction?
+        var receivedTarget: GestureExecutionTarget?
+        let target = GestureExecutionTarget(
+            inputProcessIdentifier: 123,
+            menuProcessIdentifier: 456,
+            inputBundleIdentifier: "com.example.helper",
+            applicationBundleIdentifier: "com.example.application",
+            gestureStartPoint: CGPoint(x: 50, y: 60)
+        )
         let executor = ActionExecutor(
             eventLogger: { _, _ in },
-            windowActionHandler: { action in
+            windowActionHandler: { action, target in
                 receivedAction = action
+                receivedTarget = target
                 return true
             }
         )
 
-        executor.execute([.init(type: .windowAction, value: WindowAction.center.rawValue)])
+        executor.execute(
+            [.init(type: .windowAction, value: WindowAction.center.rawValue)],
+            context: .init(target: target)
+        )
         try await Task.sleep(nanoseconds: 20_000_000)
 
         XCTAssertEqual(receivedAction, .center)
+        XCTAssertEqual(receivedTarget, target)
         XCTAssertFalse(executor.isExecuting)
     }
 
@@ -123,7 +136,7 @@ final class ActionExecutorTests: XCTestCase {
             eventLogger: { event, metadata in
                 loggedEvents.append((event, metadata))
             },
-            windowActionHandler: { _ in false }
+            windowActionHandler: { _, _ in false }
         )
 
         executor.execute([.init(type: .windowAction, value: WindowAction.tileLeft.rawValue)])
@@ -142,7 +155,7 @@ final class ActionExecutorTests: XCTestCase {
         var receivedAction: CaptureAction?
         let executor = ActionExecutor(
             eventLogger: { _, _ in },
-            windowActionHandler: { _ in true },
+            windowActionHandler: { _, _ in true },
             captureActionHandler: { action, bounds in
                 receivedAction = action
                 XCTAssertEqual(bounds, CGRect(x: 10, y: 20, width: 30, height: 40))
@@ -165,7 +178,7 @@ final class ActionExecutorTests: XCTestCase {
         let expectedBounds = CGRect(x: 15, y: 25, width: 120, height: 80)
         let executor = ActionExecutor(
             eventLogger: { _, _ in },
-            windowActionHandler: { _ in true },
+            windowActionHandler: { _, _ in true },
             captureActionHandler: { _, _ in true },
             ocrActionHandler: { action, bounds in
                 receivedAction = action
@@ -207,7 +220,7 @@ final class ActionExecutorTests: XCTestCase {
     private func makeExecutor() -> ActionExecutor {
         ActionExecutor(
             eventLogger: { _, _ in },
-            windowActionHandler: { _ in true }
+            windowActionHandler: { _, _ in true }
         )
     }
 }

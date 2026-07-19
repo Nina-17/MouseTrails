@@ -1,18 +1,32 @@
 import AppKit
+import Darwin
 import MouseIncCore
+
+/// The application that owned focus when the gesture began.  Actions that
+/// alter a window must use this stable target rather than whichever process
+/// happens to become frontmost while the gesture is being recognized.
+struct GestureExecutionTarget: Equatable, Sendable {
+    let inputProcessIdentifier: pid_t
+    let menuProcessIdentifier: pid_t?
+    let inputBundleIdentifier: String?
+    let applicationBundleIdentifier: String?
+    let gestureStartPoint: CGPoint
+}
 
 @MainActor
 final class ActionExecutor {
     struct ExecutionContext: Equatable, Sendable {
         var gestureBounds: CGRect?
+        var target: GestureExecutionTarget?
 
-        init(gestureBounds: CGRect? = nil) {
+        init(gestureBounds: CGRect? = nil, target: GestureExecutionTarget? = nil) {
             self.gestureBounds = gestureBounds
+            self.target = target
         }
     }
 
     typealias EventLogger = @MainActor (DiagnosticEvent, [String: String]) -> Void
-    typealias WindowActionHandler = @MainActor (WindowAction) -> Bool
+    typealias WindowActionHandler = @MainActor (WindowAction, GestureExecutionTarget?) -> Bool
     typealias SystemViewActionHandler = @MainActor (SystemViewAction) -> Bool
     typealias CaptureActionHandler = @MainActor (CaptureAction, CGRect?) -> Bool
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
@@ -114,7 +128,7 @@ final class ActionExecutor {
     private func executeImmediately(_ action: ActionDefinition, context: ExecutionContext) -> Bool {
         switch action.type {
         case .keyStroke:
-            return sendKeyStroke(action.value)
+            return sendKeyStroke(action.value, target: context.target)
         case .openURL:
             guard let url = URL(string: action.value), url.scheme != nil else {
                 return false
@@ -126,8 +140,13 @@ final class ActionExecutor {
             return false
         case .windowAction:
             guard let windowAction = WindowAction(rawValue: action.value) else { return false }
-            let succeeded = windowActionHandler(windowAction)
-            logInvokedAction(type: action.type, value: windowAction.rawValue, succeeded: succeeded)
+            let succeeded = windowActionHandler(windowAction, context.target)
+            logInvokedAction(
+                type: action.type,
+                value: windowAction.rawValue,
+                succeeded: succeeded,
+                target: context.target
+            )
             return succeeded
         case .systemViewAction:
             guard let systemAction = SystemViewAction(rawValue: action.value) else { return false }
@@ -179,7 +198,7 @@ final class ActionExecutor {
         return false
     }
 
-    private func sendKeyStroke(_ value: String) -> Bool {
+    private func sendKeyStroke(_ value: String, target: GestureExecutionTarget?) -> Bool {
         guard
             let keyStroke = KeyStrokeParser.parse(value),
             let keyCode = KeyMap.code(for: keyStroke.key)
@@ -189,6 +208,10 @@ final class ActionExecutor {
 
         if keyStrokeHandler(keyStroke) {
             return true
+        }
+
+        if keyStroke.key == "w", keyStroke.modifiers == [.command] {
+            return AccessibilityWindowActions.closeWindowOrTab(target: target)
         }
 
         var flags: CGEventFlags = []
@@ -225,16 +248,21 @@ final class ActionExecutor {
     private func logInvokedAction(
         type: ActionDefinition.Kind,
         value: String,
-        succeeded: Bool
+        succeeded: Bool,
+        target: GestureExecutionTarget? = nil
     ) {
-        eventLogger(
-            .actionInvoked,
-            [
-                "type": type.rawValue,
-                "value": value,
-                "accepted": String(succeeded)
-            ]
-        )
+        var metadata = [
+            "type": type.rawValue,
+            "value": value,
+            "accepted": String(succeeded)
+        ]
+        if let target {
+            metadata["inputPID"] = String(target.inputProcessIdentifier)
+            if let menuProcessIdentifier = target.menuProcessIdentifier {
+                metadata["menuPID"] = String(menuProcessIdentifier)
+            }
+        }
+        eventLogger(.actionInvoked, metadata)
     }
 
     private func finish(executionID: UUID, outcome: String) {

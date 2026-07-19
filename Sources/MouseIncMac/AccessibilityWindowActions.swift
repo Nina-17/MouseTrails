@@ -21,6 +21,22 @@ enum CloseAllWindowStrategy: Equatable {
     }
 }
 
+enum LogicalWindowCloseFallback: Equatable {
+    case none
+    case hideLogicalApplication
+
+    static func forApplications(
+        inputBundleIdentifier: String?,
+        logicalBundleIdentifier: String?
+    ) -> Self {
+        if inputBundleIdentifier == "com.valvesoftware.steam.helper",
+           logicalBundleIdentifier == "com.valvesoftware.steam" {
+            return .hideLogicalApplication
+        }
+        return .none
+    }
+}
+
 enum WindowLayoutRegion: Equatable {
     case topLeft
     case topRight
@@ -98,6 +114,105 @@ struct WindowLayoutCalculator {
             return CGRect(x: bounds.midX, y: bounds.midY, width: halfWidth, height: halfHeight)
         }
     }
+
+    static func targetFrame(
+        for action: WindowAction,
+        currentFrame: CGRect,
+        in bounds: CGRect
+    ) -> CGRect? {
+        if let cornerFrame = frames(for: action, in: bounds)?.first {
+            return cornerFrame
+        }
+        switch action {
+        case .fill:
+            return bounds
+        case .center:
+            let size = CGSize(
+                width: min(currentFrame.width, bounds.width),
+                height: min(currentFrame.height, bounds.height)
+            )
+            return CGRect(
+                x: bounds.midX - size.width / 2,
+                y: bounds.midY - size.height / 2,
+                width: size.width,
+                height: size.height
+            )
+        case .tileLeft:
+            return CGRect(
+                x: bounds.minX,
+                y: bounds.minY,
+                width: bounds.width / 2,
+                height: bounds.height
+            )
+        case .tileRight:
+            return CGRect(
+                x: bounds.midX,
+                y: bounds.minY,
+                width: bounds.width / 2,
+                height: bounds.height
+            )
+        case .tileTop:
+            return CGRect(
+                x: bounds.minX,
+                y: bounds.minY,
+                width: bounds.width,
+                height: bounds.height / 2
+            )
+        case .tileBottom:
+            return CGRect(
+                x: bounds.minX,
+                y: bounds.midY,
+                width: bounds.width,
+                height: bounds.height / 2
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// Apps such as Steam and Z-Library clamp requested sizes to their own
+    /// minimums. Keep the size the app accepted and re-anchor it to the edge
+    /// the user requested instead of treating that constraint as a failure.
+    static func anchoredFrame(
+        for action: WindowAction,
+        acceptedSize: CGSize,
+        in bounds: CGRect
+    ) -> CGRect? {
+        guard acceptedSize.width > 0, acceptedSize.height > 0 else { return nil }
+        let left = bounds.minX
+        let right = max(bounds.minX, bounds.maxX - acceptedSize.width)
+        let top = bounds.minY
+        let bottom = max(bounds.minY, bounds.maxY - acceptedSize.height)
+        let centerX = bounds.midX - acceptedSize.width / 2
+        let centerY = bounds.midY - acceptedSize.height / 2
+
+        let origin: CGPoint
+        switch action {
+        case .fill:
+            origin = CGPoint(x: left, y: top)
+        case .center:
+            origin = CGPoint(x: centerX, y: centerY)
+        case .tileLeft:
+            origin = CGPoint(x: left, y: top)
+        case .tileRight:
+            origin = CGPoint(x: right, y: top)
+        case .tileTop:
+            origin = CGPoint(x: left, y: top)
+        case .tileBottom:
+            origin = CGPoint(x: left, y: bottom)
+        case .tileTopLeft:
+            origin = CGPoint(x: left, y: top)
+        case .tileTopRight:
+            origin = CGPoint(x: right, y: top)
+        case .tileBottomLeft:
+            origin = CGPoint(x: left, y: bottom)
+        case .tileBottomRight:
+            origin = CGPoint(x: right, y: bottom)
+        default:
+            return nil
+        }
+        return CGRect(origin: origin, size: acceptedSize)
+    }
 }
 
 @MainActor
@@ -114,39 +229,100 @@ enum AccessibilityWindowActions {
     }
 
     private static var savedFrames: [WindowIdentity: CGRect] = [:]
+    private static var unsupportedMenuCommands: Set<MenuCapabilityKey> = []
 
-    static func perform(_ action: WindowAction) -> Bool {
+    private struct MenuCapabilityKey: Hashable {
+        let processIdentifier: pid_t
+        let launchDate: Date?
+        let command: String
+    }
+
+    static func perform(_ action: WindowAction, target: GestureExecutionTarget? = nil) -> Bool {
         switch action {
-        case .center, .fill, .tileLeft, .tileRight, .tileTop, .tileBottom:
-            return performNativeWindowMenuCommand(action)
+        case .center, .fill, .tileLeft, .tileRight, .tileTop, .tileBottom,
+             .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight:
+            return performNativeWindowMenuCommand(action, target: target)
+                || applyLayout(action, target: target)
         case .maximize:
-            return performNativeFullScreenMenuCommand()
-        case .tileTopLeft, .tileTopRight, .tileBottomLeft, .tileBottomRight:
-            return performNativeWindowMenuCommand(action) || applyLayout(action)
+            return performNativeFullScreenMenuCommand(target: target)
+                || toggleFullScreen(target: target)
         case .restorePreviousSize:
-            if canRestoreSavedFrame() {
-                return restorePreviousFrame()
+            if performNativeWindowMenuCommand(action, target: target) {
+                return true
             }
-            return performNativeWindowMenuCommand(action)
+            return restorePreviousFrame(target: target)
         case .minimize:
-            return setBooleanAttribute(kAXMinimizedAttribute, value: true)
+            return setBooleanAttribute(
+                kAXMinimizedAttribute,
+                value: true,
+                target: target
+            ) || pressWindowButton(kAXMinimizeButtonAttribute, target: target)
         case .close:
-            return pressWindowButton(kAXCloseButtonAttribute)
+            return closeFocusedWindow(target: target)
         case .closeAll:
-            return sendCloseAllShortcut()
+            return sendCloseAllShortcut(target: target)
         case .quitApplication:
-            return quitFrontmostApplication()
+            return quitApplication(target: target)
         }
     }
 
-    private static func performNativeWindowMenuCommand(_ action: WindowAction) -> Bool {
-        guard let application = NSWorkspace.shared.frontmostApplication,
-              let command = NativeWindowMenuCommand.forAction(action) else { return false }
+    /// Preserves the ordinary Command-W meaning (close tab when applicable,
+    /// otherwise close window) while adding the focus handoff used after the
+    /// final visible window goes away.
+    static func closeWindowOrTab(target: GestureExecutionTarget?) -> Bool {
+        guard let inputApplication = inputApplication(for: target) else { return false }
+        let window = focusedWindow(target: target)
+        let snapshot = window.flatMap(FocusHandoffCoordinator.snapshot)
+        let application = menuApplication(for: target) ?? inputApplication
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(applicationElement, 0.3)
+        let closeTitles = ["Close Tab", "Close Window", "Close", "关闭标签页", "关闭窗口", "关闭"]
+        let closeIdentifiers = ["closeTab:", "performClose:", "close:"]
+        let menuClosed = elementAttribute(kAXMenuBarAttribute, from: applicationElement).flatMap {
+            findMenuItem(
+                titles: closeTitles,
+                identifiers: closeIdentifiers,
+                in: $0,
+                depth: 0
+            )
+        }.map {
+            AXUIElementPerformAction($0, kAXPressAction as CFString) == .success
+        } ?? false
+
+        if menuClosed {
+            FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
+            return true
+        }
+        if let window, pressWindowButton(kAXCloseButtonAttribute, on: window) {
+            FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
+            return true
+        }
+        if hideLogicalApplicationFallback(target: target, snapshot: snapshot) {
+            return true
+        }
+        guard postCommandW() else { return false }
+        FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
+        return true
+    }
+
+    private static func performNativeWindowMenuCommand(
+        _ action: WindowAction,
+        target: GestureExecutionTarget?
+    ) -> Bool {
+        guard let application = menuApplication(for: target),
+              let command = NativeWindowMenuCommand.forAction(action) else { return false }
+        let capabilityKey = menuCapabilityKey(
+            application: application,
+            command: action.rawValue
+        )
+        guard !unsupportedMenuCommands.contains(capabilityKey) else { return false }
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(applicationElement, 0.3)
         guard let menuBar = elementAttribute(kAXMenuBarAttribute, from: applicationElement),
               let windowMenu = findWindowMenu(in: menuBar),
               let menuItem = findMenuItem(matching: command, in: windowMenu, depth: 0)
         else {
+            unsupportedMenuCommands.insert(capabilityKey)
             DiagnosticLogger.shared.log(
                 "Native window menu command not found; action=\(action.rawValue); " +
                 "bundle=\(application.bundleIdentifier ?? "unknown")"
@@ -191,16 +367,24 @@ enum AccessibilityWindowActions {
     }
 
     private static func findWindowMenu(in menuBar: AXUIElement) -> AXUIElement? {
-        let knownTitles = ["Window", "窗口", "視窗", "ウインドウ", "윈도우"]
+        let knownTitles = ["Window", "窗口", "窗户", "視窗", "ウインドウ", "윈도우"]
         return elementArrayAttribute(kAXChildrenAttribute, from: menuBar).first { element in
             guard let title = stringAttribute(kAXTitleAttribute, from: element) else { return false }
             return knownTitles.contains(title)
         }
     }
 
-    private static func performNativeFullScreenMenuCommand() -> Bool {
-        guard let application = NSWorkspace.shared.frontmostApplication else { return false }
+    private static func performNativeFullScreenMenuCommand(
+        target: GestureExecutionTarget?
+    ) -> Bool {
+        guard let application = menuApplication(for: target) else { return false }
+        let capabilityKey = menuCapabilityKey(
+            application: application,
+            command: WindowAction.maximize.rawValue
+        )
+        guard !unsupportedMenuCommands.contains(capabilityKey) else { return false }
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(applicationElement, 0.3)
         let titles = [
             "Enter Full Screen", "Exit Full Screen",
             "进入全屏幕", "退出全屏幕",
@@ -216,6 +400,7 @@ enum AccessibilityWindowActions {
                   depth: 0
               )
         else {
+            unsupportedMenuCommands.insert(capabilityKey)
             DiagnosticLogger.shared.log(
                 "Native full-screen menu command not found; " +
                 "bundle=\(application.bundleIdentifier ?? "unknown")"
@@ -299,14 +484,40 @@ enum AccessibilityWindowActions {
         }
     }
 
-    private static func quitFrontmostApplication() -> Bool {
-        NSWorkspace.shared.frontmostApplication?.terminate() ?? false
+    private static func quitApplication(target: GestureExecutionTarget?) -> Bool {
+        guard let application = logicalApplication(for: target) else { return false }
+        let accepted = application.terminate()
+        DiagnosticLogger.shared.log(
+            "Application termination requested; pid=\(application.processIdentifier); " +
+            "bundle=\(application.bundleIdentifier ?? "unknown"); accepted=\(accepted)"
+        )
+        return accepted
     }
 
-    private static func sendCloseAllShortcut() -> Bool {
-        guard let application = NSWorkspace.shared.frontmostApplication else { return false }
-        if CloseAllWindowStrategy.forBundleIdentifier(application.bundleIdentifier) == .terminateApplication {
-            return application.terminate()
+    private static func sendCloseAllShortcut(target: GestureExecutionTarget?) -> Bool {
+        guard let inputApplication = inputApplication(for: target) else { return false }
+        let logicalApplication = logicalApplication(for: target) ?? inputApplication
+        let snapshot = focusedWindow(target: target).flatMap(FocusHandoffCoordinator.snapshot)
+            ?? FocusHandoffCoordinator.snapshot(
+                closingProcessIdentifier: inputApplication.processIdentifier
+            )
+        if CloseAllWindowStrategy.forBundleIdentifier(logicalApplication.bundleIdentifier)
+            == .terminateApplication {
+            let terminated = logicalApplication.terminate()
+            if terminated {
+                FocusHandoffCoordinator.scheduleAfterClosingAll(snapshot)
+            }
+            return terminated
+        }
+        if usesLogicalHideFallback(target: target) {
+            _ = logicalApplication.hide()
+            DiagnosticLogger.shared.log(
+                "Close-all used logical-app hide fallback; " +
+                "inputPID=\(inputApplication.processIdentifier); " +
+                "logicalPID=\(logicalApplication.processIdentifier)"
+            )
+            FocusHandoffCoordinator.scheduleAfterClosingAll(snapshot)
+            return true
         }
         let source = CGEventSource(stateID: .hidSystemState)
         guard
@@ -317,11 +528,61 @@ enum AccessibilityWindowActions {
         keyUp.flags = [.maskCommand, .maskAlternate]
         keyDown.post(tap: .cghidEventTap)
         keyUp.post(tap: .cghidEventTap)
+        FocusHandoffCoordinator.scheduleAfterClosingAll(snapshot)
         return true
     }
 
-    private static func setBooleanAttribute(_ attribute: String, value: Bool) -> Bool {
-        guard let window = focusedWindow() else { return false }
+    private static func postCommandW() -> Bool {
+        let source = CGEventSource(stateID: .hidSystemState)
+        guard
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: false)
+        else { return false }
+        keyDown.flags = [.maskCommand]
+        keyUp.flags = [.maskCommand]
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+        return true
+    }
+
+    private static func closeFocusedWindow(target: GestureExecutionTarget?) -> Bool {
+        guard let window = focusedWindow(target: target) else { return false }
+        let snapshot = FocusHandoffCoordinator.snapshot(closing: window)
+        if pressWindowButton(kAXCloseButtonAttribute, on: window) {
+            FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
+            return true
+        }
+        return hideLogicalApplicationFallback(target: target, snapshot: snapshot)
+    }
+
+    private static func hideLogicalApplicationFallback(
+        target: GestureExecutionTarget?,
+        snapshot: FocusHandoffCoordinator.Snapshot?
+    ) -> Bool {
+        guard usesLogicalHideFallback(target: target),
+              let inputApplication = inputApplication(for: target),
+              let application = logicalApplication(for: target)
+        else { return false }
+
+        // Steam's visible CEF window exposes no AX close button and no Close
+        // menu command. Hiding its logical host matches its red-button behavior
+        // without killing the helper process that Steam would immediately relaunch.
+        _ = application.hide()
+        DiagnosticLogger.shared.log(
+            "Close used logical-app hide fallback; " +
+            "inputPID=\(inputApplication.processIdentifier); " +
+            "logicalPID=\(application.processIdentifier)"
+        )
+        FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
+        return true
+    }
+
+    private static func setBooleanAttribute(
+        _ attribute: String,
+        value: Bool,
+        target: GestureExecutionTarget?
+    ) -> Bool {
+        guard let window = focusedWindow(target: target) else { return false }
         return AXUIElementSetAttributeValue(
             window,
             attribute as CFString,
@@ -329,8 +590,15 @@ enum AccessibilityWindowActions {
         ) == .success
     }
 
-    private static func pressWindowButton(_ attribute: String) -> Bool {
-        guard let window = focusedWindow() else { return false }
+    private static func pressWindowButton(
+        _ attribute: String,
+        target: GestureExecutionTarget?
+    ) -> Bool {
+        guard let window = focusedWindow(target: target) else { return false }
+        return pressWindowButton(attribute, on: window)
+    }
+
+    private static func pressWindowButton(_ attribute: String, on window: AXUIElement) -> Bool {
         var value: CFTypeRef?
         guard
             AXUIElementCopyAttributeValue(window, attribute as CFString, &value) == .success,
@@ -343,72 +611,90 @@ enum AccessibilityWindowActions {
         ) == .success
     }
 
-    private static func applyLayout(_ action: WindowAction) -> Bool {
+    private static func toggleFullScreen(target: GestureExecutionTarget?) -> Bool {
+        guard let window = focusedWindow(target: target) else { return false }
+        let fullScreenAttribute = "AXFullScreen"
+        if let isFullScreen = booleanAttribute(fullScreenAttribute, from: window),
+           setBooleanAttribute(fullScreenAttribute, value: !isFullScreen, on: window) {
+            DiagnosticLogger.shared.log(
+                "Full-screen toggled through AX fallback; value=\(!isFullScreen)"
+            )
+            return true
+        }
+        return pressWindowButton(kAXFullScreenButtonAttribute, on: window)
+    }
+
+    private static func applyLayout(
+        _ action: WindowAction,
+        target: GestureExecutionTarget?
+    ) -> Bool {
         guard
-            let focusedWindow = focusedWindow(),
-            let focusedFrame = frame(of: focusedWindow),
+            let window = focusedWindow(target: target),
+            let currentFrame = frame(of: window),
             let visibleBounds = quartzVisibleBounds(containing: CGPoint(
-                x: focusedFrame.midX,
-                y: focusedFrame.midY
+                x: currentFrame.midX,
+                y: currentFrame.midY
             )),
-            let targetFrames = WindowLayoutCalculator.frames(for: action, in: visibleBounds)
+            let requestedFrame = WindowLayoutCalculator.targetFrame(
+                for: action,
+                currentFrame: currentFrame,
+                in: visibleBounds
+            ),
+            let identity = identity(for: window)
         else { return false }
 
-        guard targetFrames.count == 1 else { return false }
-        return applyFrames(targetFrames, to: [focusedWindow])
+        let wasMinimized = booleanAttribute(kAXMinimizedAttribute, from: window) ?? false
+        if wasMinimized,
+           !setBooleanAttribute(kAXMinimizedAttribute, value: false, on: window) {
+            return false
+        }
+        let frameWasAlreadySaved = savedFrames[identity] != nil
+        if !frameWasAlreadySaved {
+            savedFrames[identity] = currentFrame
+        }
+
+        guard setPosition(requestedFrame.origin, for: window),
+              setSize(requestedFrame.size, for: window),
+              let acceptedFrame = frame(of: window),
+              let anchoredFrame = WindowLayoutCalculator.anchoredFrame(
+                  for: action,
+                  acceptedSize: acceptedFrame.size,
+                  in: visibleBounds
+              ),
+              setPosition(anchoredFrame.origin, for: window),
+              let finalFrame = frame(of: window)
+        else {
+            _ = setFrame(currentFrame, for: window)
+            if wasMinimized {
+                _ = setBooleanAttribute(kAXMinimizedAttribute, value: true, on: window)
+            }
+            if !frameWasAlreadySaved {
+                savedFrames.removeValue(forKey: identity)
+            }
+            return false
+        }
+
+        let constrained = !approximatelyEqual(finalFrame.size, requestedFrame.size)
+        DiagnosticLogger.shared.log(
+            "AX layout fallback completed; action=\(action.rawValue); " +
+            "requested=\(requestedFrame); actual=\(finalFrame); constrained=\(constrained)"
+        )
+        return finalFrame.width > 40
+            && finalFrame.height > 40
+            && finalFrame.intersects(visibleBounds)
     }
 
-    private static func restorePreviousFrame() -> Bool {
-        guard let window = focusedWindow(), let identity = identity(for: window),
-              let target = savedFrames[identity] else { return false }
-        guard setFrame(target, for: window) else { return false }
+    private static func restorePreviousFrame(target: GestureExecutionTarget?) -> Bool {
+        guard let window = focusedWindow(target: target),
+              let identity = identity(for: window),
+              let savedFrame = savedFrames[identity]
+        else { return false }
+        guard setFrame(savedFrame, for: window) else { return false }
         savedFrames.removeValue(forKey: identity)
-        return true
-    }
-
-    private static func canRestoreSavedFrame() -> Bool {
-        guard let window = focusedWindow(), let identity = identity(for: window) else { return false }
-        return savedFrames[identity] != nil
-    }
-
-    private static func applyFrames(_ targets: [CGRect], to windows: [AXUIElement]) -> Bool {
-        guard targets.count == windows.count else { return false }
-        let originals = windows.compactMap(frame(of:))
-        guard originals.count == windows.count else { return false }
-        let minimizedStates = windows.map {
-            booleanAttribute(kAXMinimizedAttribute, from: $0) ?? false
-        }
-
-        for (index, window) in windows.enumerated() where minimizedStates[index] {
-            guard setBooleanAttribute(kAXMinimizedAttribute, value: false, on: window) else {
-                restoreMinimizedStates(minimizedStates, windows: windows, through: index)
-                return false
-            }
-        }
-
-        var newlySaved: [WindowIdentity] = []
-        for (window, original) in zip(windows, originals) {
-            guard let identity = identity(for: window) else {
-                newlySaved.forEach { savedFrames.removeValue(forKey: $0) }
-                restoreMinimizedStates(minimizedStates, windows: windows)
-                return false
-            }
-            if savedFrames[identity] == nil {
-                savedFrames[identity] = original
-                newlySaved.append(identity)
-            }
-        }
-
-        for (index, pair) in zip(windows, targets).enumerated() {
-            guard setFrame(pair.1, for: pair.0) else {
-                for rollbackIndex in 0 ... index {
-                    _ = setFrame(originals[rollbackIndex], for: windows[rollbackIndex])
-                }
-                newlySaved.forEach { savedFrames.removeValue(forKey: $0) }
-                restoreMinimizedStates(minimizedStates, windows: windows)
-                return false
-            }
-        }
+        DiagnosticLogger.shared.log(
+            "AX layout fallback restored previous frame; requested=\(savedFrame); " +
+            "actual=\(String(describing: frame(of: window)))"
+        )
         return true
     }
 
@@ -441,35 +727,38 @@ enum AccessibilityWindowActions {
     }
 
     private static func setFrame(_ frame: CGRect, for window: AXUIElement) -> Bool {
-        var size = frame.size
-        var position = frame.origin
-        guard
-            let sizeValue = AXValueCreate(.cgSize, &size),
-            let positionValue = AXValueCreate(.cgPoint, &position),
-            AXUIElementSetAttributeValue(
-                window,
-                kAXSizeAttribute as CFString,
-                sizeValue
-            ) == .success,
-            AXUIElementSetAttributeValue(
-                window,
-                kAXPositionAttribute as CFString,
-                positionValue
-            ) == .success
-        else { return false }
-        return true
+        // Position first so apps do not clamp a growing window against its old
+        // lower/right edge. Reapply the position after sizing because minimum
+        // size constraints can otherwise push right/bottom layouts off-screen.
+        setPosition(frame.origin, for: window)
+            && setSize(frame.size, for: window)
+            && setPosition(frame.origin, for: window)
     }
 
-    private static func restoreMinimizedStates(
-        _ states: [Bool],
-        windows: [AXUIElement],
-        through lastIndex: Int? = nil
-    ) {
-        let upperBound = min(lastIndex ?? (windows.count - 1), windows.count - 1)
-        guard upperBound >= 0 else { return }
-        for index in 0 ... upperBound where states[index] {
-            _ = setBooleanAttribute(kAXMinimizedAttribute, value: true, on: windows[index])
-        }
+    private static func setPosition(_ position: CGPoint, for window: AXUIElement) -> Bool {
+        var position = position
+        guard let value = AXValueCreate(.cgPoint, &position) else { return false }
+        return AXUIElementSetAttributeValue(
+            window,
+            kAXPositionAttribute as CFString,
+            value
+        ) == .success
+    }
+
+    private static func setSize(_ size: CGSize, for window: AXUIElement) -> Bool {
+        var size = size
+        guard let value = AXValueCreate(.cgSize, &size) else { return false }
+        return AXUIElementSetAttributeValue(
+            window,
+            kAXSizeAttribute as CFString,
+            value
+        ) == .success
+    }
+
+    private static func approximatelyEqual(_ left: CGSize, _ right: CGSize) -> Bool {
+        let tolerance: CGFloat = 4
+        return abs(left.width - right.width) <= tolerance
+            && abs(left.height - right.height) <= tolerance
     }
 
     private static func stringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
@@ -534,22 +823,83 @@ enum AccessibilityWindowActions {
         ) == .success
     }
 
-    private static func focusedWindow() -> AXUIElement? {
-        guard let application = NSWorkspace.shared.frontmostApplication else { return nil }
-        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
-        var value: CFTypeRef?
-        guard
-            AXUIElementCopyAttributeValue(
-                applicationElement,
-                kAXFocusedWindowAttribute as CFString,
-                &value
-            ) == .success,
-            let value,
-            CFGetTypeID(value) == AXUIElementGetTypeID()
-        else {
-            return nil
+    private static func inputApplication(for target: GestureExecutionTarget?) -> NSRunningApplication? {
+        if let target {
+            return NSRunningApplication(processIdentifier: target.inputProcessIdentifier)
         }
-        return unsafeDowncast(value, to: AXUIElement.self)
+        return NSWorkspace.shared.frontmostApplication
+    }
+
+    private static func menuApplication(for target: GestureExecutionTarget?) -> NSRunningApplication? {
+        if let target {
+            if let processIdentifier = target.menuProcessIdentifier,
+               let application = NSRunningApplication(processIdentifier: processIdentifier) {
+                return application
+            }
+            return inputApplication(for: target)
+        }
+        return NSWorkspace.shared.menuBarOwningApplication
+            ?? NSWorkspace.shared.frontmostApplication
+    }
+
+    private static func logicalApplication(for target: GestureExecutionTarget?) -> NSRunningApplication? {
+        menuApplication(for: target) ?? inputApplication(for: target)
+    }
+
+    private static func usesLogicalHideFallback(target: GestureExecutionTarget?) -> Bool {
+        LogicalWindowCloseFallback.forApplications(
+            inputBundleIdentifier: target?.inputBundleIdentifier,
+            logicalBundleIdentifier: target?.applicationBundleIdentifier
+        ) == .hideLogicalApplication
+    }
+
+    private static func menuCapabilityKey(
+        application: NSRunningApplication,
+        command: String
+    ) -> MenuCapabilityKey {
+        MenuCapabilityKey(
+            processIdentifier: application.processIdentifier,
+            launchDate: application.launchDate,
+            command: command
+        )
+    }
+
+    private static func focusedWindow(target: GestureExecutionTarget? = nil) -> AXUIElement? {
+        guard let application = inputApplication(for: target) else { return nil }
+        let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
+        AXUIElementSetMessagingTimeout(applicationElement, 0.3)
+        var value: CFTypeRef?
+        if AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXFocusedWindowAttribute as CFString,
+            &value
+        ) == .success,
+           let value,
+           CFGetTypeID(value) == AXUIElementGetTypeID() {
+            let focused = unsafeDowncast(value, to: AXUIElement.self)
+            if frame(of: focused).map({ $0.width > 40 && $0.height > 40 }) == true {
+                return focused
+            }
+        }
+        if AXUIElementCopyAttributeValue(
+            applicationElement,
+            kAXMainWindowAttribute as CFString,
+            &value
+        ) == .success,
+           let value,
+           CFGetTypeID(value) == AXUIElementGetTypeID() {
+            let main = unsafeDowncast(value, to: AXUIElement.self)
+            if frame(of: main).map({ $0.width > 40 && $0.height > 40 }) == true {
+                return main
+            }
+        }
+        let windows = elementArrayAttribute(kAXWindowsAttribute, from: applicationElement)
+            .filter { frame(of: $0).map { $0.width > 40 && $0.height > 40 } == true }
+        if let point = target?.gestureStartPoint,
+           let containingWindow = windows.first(where: { frame(of: $0)?.contains(point) == true }) {
+            return containingWindow
+        }
+        return windows.first
     }
 
     private static func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {

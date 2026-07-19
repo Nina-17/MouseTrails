@@ -20,6 +20,7 @@ final class GestureMonitor: NSObject {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var session = GestureSession()
+    private var executionTarget: GestureExecutionTarget?
     private var timeoutTask: Task<Void, Never>?
     private var didLogDrag = false
     private var edgeCooldown = EdgeScrollCooldown()
@@ -146,10 +147,25 @@ final class GestureMonitor: NSObject {
                 startDistance: options.startDistance,
                 maximumDuration: options.maximumDuration
             )
+            let inputApplication = NSWorkspace.shared.frontmostApplication
+            let menuApplication = NSWorkspace.shared.menuBarOwningApplication
+            let targetBundleIdentifier = menuApplication?.bundleIdentifier
+                ?? inputApplication?.bundleIdentifier
+            if let inputApplication {
+                executionTarget = GestureExecutionTarget(
+                    inputProcessIdentifier: inputApplication.processIdentifier,
+                    menuProcessIdentifier: menuApplication?.processIdentifier,
+                    inputBundleIdentifier: inputApplication.bundleIdentifier,
+                    applicationBundleIdentifier: targetBundleIdentifier,
+                    gestureStartPoint: event.location
+                )
+            } else {
+                executionTarget = nil
+            }
             session.begin(
                 quartzPoint: event.location,
                 appKitPoint: NSEvent.mouseLocation,
-                targetBundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                targetBundleIdentifier: targetBundleIdentifier,
                 replayFlags: event.flags,
                 replayClickState: event.getIntegerValueField(.mouseEventClickState),
                 settings: settings,
@@ -434,7 +450,10 @@ final class GestureMonitor: NSObject {
         executor.execute(
             binding.actions,
             options: configuration.actionSequenceOptions,
-            context: .init(gestureBounds: Self.boundingRect(of: points))
+            context: .init(
+                gestureBounds: Self.boundingRect(of: points),
+                target: executionTarget
+            )
         )
         logger.info("Gesture matched: \(identifier, privacy: .public)")
         DiagnosticLogger.shared.log("Gesture matched: \(identifier); action=\(binding.name)")
@@ -473,6 +492,7 @@ final class GestureMonitor: NSObject {
         timeoutTask = nil
         overlay.hide()
         session.reset()
+        executionTarget = nil
         didLogDrag = false
     }
 }
