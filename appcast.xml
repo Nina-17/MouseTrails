@@ -3,14 +3,14 @@
     <channel>
         <title>MouseTrails</title>
         <item>
-            <title>0.23.0</title>
-            <pubDate>Thu, 16 Jul 2026 08:45:33 +0000</pubDate>
+            <title>0.24.0</title>
+            <pubDate>Sun, 19 Jul 2026 11:33:58 +0000</pubDate>
             <link>https://github.com/Nina-17/MouseTrails</link>
-            <sparkle:version>60</sparkle:version>
-            <sparkle:shortVersionString>0.23.0</sparkle:shortVersionString>
+            <sparkle:version>61</sparkle:version>
+            <sparkle:shortVersionString>0.24.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/Nina-17/MouseTrails/releases/download/v0.23.0/MouseTrails-0.23.0.dmg" length="4422025" type="application/octet-stream" sparkle:edSignature="qLmAHAdybeu6BoQSJgutAJsqq0Tue6c7aFYZuLe9MZNKSvroL2LZtvaAZyeJUNzZjEBzku9sr+8cBxJTf3okDQ=="/>
+            <enclosure url="https://github.com/Nina-17/MouseTrails/releases/download/v0.24.0/MouseTrails-0.24.0.dmg" length="4453933" type="application/octet-stream" sparkle:edSignature="kdVRXIKSCKWNKkKw61k9tF5Ow/TjIK3mnG0L0/og2nq5ytMyD2PRmalHw0lYbLNAyvsYSmw5PmNIGEz72MDJAg=="/>
         </item>
     </channel>
 </rss>
