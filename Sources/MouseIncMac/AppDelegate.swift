@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.handlePermissionSnapshotChange(snapshot)
         }
         tutorialCoordinator.onClose = { [weak self] in
-            self?.restoreBackgroundActivationPolicy()
+            self?.restoreBackgroundActivationPolicy(afterClosing: .tutorial)
         }
         tutorialCoordinator.persistCustomSearchGesture = { [weak self] definition, binding in
             guard let self else { throw CocoaError(.userCancelled) }
@@ -359,9 +359,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    private func restoreBackgroundActivationPolicy() {
-        guard settingsWindowController?.window?.isVisible != true,
-              tutorialCoordinator.window?.isVisible != true else { return }
+    private enum ForegroundWindow {
+        case settings
+        case tutorial
+    }
+
+    private func restoreBackgroundActivationPolicy(afterClosing closingWindow: ForegroundWindow) {
+        let settingsIsVisible = closingWindow != .settings
+            && settingsWindowController?.window?.isVisible == true
+        let tutorialIsVisible = closingWindow != .tutorial
+            && tutorialCoordinator.window?.isVisible == true
+        guard !settingsIsVisible, !tutorialIsVisible else { return }
         NSApplication.shared.setActivationPolicy(.accessory)
     }
 
@@ -521,7 +529,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 updateCoordinator: updateCoordinator,
                 permissionAuthorizationCoordinator: permissionAuthorizationCoordinator,
                 tutorialCoordinator: tutorialCoordinator,
-                closeHandler: { [weak self] in self?.restoreBackgroundActivationPolicy() }
+                closeHandler: { [weak self] in
+                    self?.restoreBackgroundActivationPolicy(afterClosing: .settings)
+                }
             )
         }
         settingsWindowController?.show(configuration: configuration, page: page)
