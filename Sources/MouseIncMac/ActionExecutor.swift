@@ -32,6 +32,8 @@ final class ActionExecutor {
     typealias OCRActionHandler = @MainActor (OCRAction, CGRect?) -> Bool
     typealias SearchSelectedTextHandler = @MainActor (String) -> Bool
     typealias KeyStrokeHandler = @MainActor (ParsedKeyStroke) -> Bool
+    typealias OpenSettingsHandler = @MainActor () -> Bool
+    typealias ExcludeCurrentApplicationHandler = @MainActor (GestureExecutionTarget?) -> Bool
 
     private var executionTask: Task<Void, Never>?
     private var activeExecutionID: UUID?
@@ -42,6 +44,8 @@ final class ActionExecutor {
     private let ocrActionHandler: OCRActionHandler
     private let searchSelectedTextHandler: SearchSelectedTextHandler
     private let keyStrokeHandler: KeyStrokeHandler
+    private let openSettingsHandler: OpenSettingsHandler
+    private let excludeCurrentApplicationHandler: ExcludeCurrentApplicationHandler
 
     init(
         eventLogger: @escaping EventLogger = { event, metadata in
@@ -52,7 +56,9 @@ final class ActionExecutor {
         captureActionHandler: @escaping CaptureActionHandler = { _, _ in false },
         ocrActionHandler: @escaping OCRActionHandler = { _, _ in false },
         searchSelectedTextHandler: @escaping SearchSelectedTextHandler = { _ in false },
-        keyStrokeHandler: @escaping KeyStrokeHandler = { _ in false }
+        keyStrokeHandler: @escaping KeyStrokeHandler = { _ in false },
+        openSettingsHandler: @escaping OpenSettingsHandler = { false },
+        excludeCurrentApplicationHandler: @escaping ExcludeCurrentApplicationHandler = { _ in false }
     ) {
         self.eventLogger = eventLogger
         self.windowActionHandler = windowActionHandler
@@ -61,6 +67,8 @@ final class ActionExecutor {
         self.ocrActionHandler = ocrActionHandler
         self.searchSelectedTextHandler = searchSelectedTextHandler
         self.keyStrokeHandler = keyStrokeHandler
+        self.openSettingsHandler = openSettingsHandler
+        self.excludeCurrentApplicationHandler = excludeCurrentApplicationHandler
     }
 
     var isExecuting: Bool {
@@ -136,6 +144,19 @@ final class ActionExecutor {
             return NSWorkspace.shared.open(url)
         case .launchApplication:
             return launchApplication(action.value)
+        case .openSettings:
+            let succeeded = openSettingsHandler()
+            logInvokedAction(type: action.type, value: "", succeeded: succeeded)
+            return succeeded
+        case .excludeCurrentApplication:
+            let succeeded = excludeCurrentApplicationHandler(context.target)
+            logInvokedAction(
+                type: action.type,
+                value: "",
+                succeeded: succeeded,
+                target: context.target
+            )
+            return succeeded
         case .delay:
             return false
         case .windowAction:

@@ -55,6 +55,7 @@ public extension AppConfiguration {
         validateGestureOptions(into: &issues)
         validateActionSequenceOptions(into: &issues)
         validateEdgeScrollOptions(into: &issues)
+        validateExcludedApplications(into: &issues)
         validateCustomGestures(into: &issues)
         validateBindings(into: &issues)
         return ConfigurationValidationResult(issues: issues)
@@ -154,6 +155,38 @@ public extension AppConfiguration {
             issues.append(.init(severity: .error, code: .invalidEdgeScrollOption,
                                 path: "edgeScrollOptions.\(name)",
                                 message: "\(name) 必须位于 \(range.lowerBound)...\(range.upperBound) 之间"))
+        }
+    }
+
+    private func validateExcludedApplications(into issues: inout [ConfigurationIssue]) {
+        var identifiers: Set<String> = []
+        for (index, application) in excludedApplications.enumerated() {
+            let path = "excludedApplications[\(index)]"
+            let bundleIdentifier = application.bundleIdentifier
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if bundleIdentifier.isEmpty {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidBundleIdentifier,
+                    path: "\(path).bundleIdentifier",
+                    message: "排除应用的 Bundle ID 不能为空"
+                ))
+            } else if !identifiers.insert(bundleIdentifier.lowercased()).inserted {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidBundleIdentifier,
+                    path: "\(path).bundleIdentifier",
+                    message: "排除应用不能重复"
+                ))
+            }
+            if application.displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issues.append(.init(
+                    severity: .error,
+                    code: .invalidBundleIdentifier,
+                    path: "\(path).displayName",
+                    message: "排除应用的名称不能为空"
+                ))
+            }
         }
     }
 
@@ -265,6 +298,10 @@ public extension AppConfiguration {
             }
         case .launchApplication:
             message = value.isEmpty ? "应用 Bundle ID 或路径不能为空" : nil
+        case .openSettings:
+            message = value.isEmpty ? nil : "打开 MouseTrails 设置动作不需要参数"
+        case .excludeCurrentApplication:
+            message = value.isEmpty ? nil : "排除当前应用动作不需要参数"
         case .delay:
             if let seconds = TimeInterval(value),
                seconds.isFinite,

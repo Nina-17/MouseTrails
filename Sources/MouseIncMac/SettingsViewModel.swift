@@ -201,6 +201,36 @@ final class SettingsViewModel: ObservableObject {
         return true
     }
 
+    func addExcludedApplication(at url: URL) -> Bool {
+        guard
+            url.pathExtension.caseInsensitiveCompare("app") == .orderedSame,
+            let bundle = Bundle(url: url),
+            let bundleIdentifier = bundle.bundleIdentifier
+        else { return false }
+
+        let displayName = (bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String)
+            ?? (bundle.object(forInfoDictionaryKey: "CFBundleName") as? String)
+            ?? url.deletingPathExtension().lastPathComponent
+        if let index = draft.excludedApplications.firstIndex(where: {
+            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }) {
+            draft.excludedApplications[index].displayName = displayName
+        } else {
+            draft.excludedApplications.append(
+                ExcludedApplication(
+                    bundleIdentifier: bundleIdentifier,
+                    displayName: displayName
+                )
+            )
+        }
+        return true
+    }
+
+    func removeExcludedApplication(at index: Int) {
+        guard draft.excludedApplications.indices.contains(index) else { return }
+        draft.excludedApplications.remove(at: index)
+    }
+
     func issues(for bindingIndex: Int) -> [ConfigurationIssue] {
         validation.issues.filter { $0.path.hasPrefix("bindings[\(bindingIndex)]") }
     }
@@ -222,6 +252,9 @@ final class SettingsViewModel: ObservableObject {
             draft.bindings[bindingIndex].actions.indices.contains(actionIndex)
         else { return }
         draft.bindings[bindingIndex].actions[actionIndex] = ActionDefinition(type: kind, value: value)
+        if kind == .openSettings || kind == .excludeCurrentApplication {
+            updateDefaultNameIfNeeded(at: bindingIndex)
+        }
     }
 
     func setActionValue(
@@ -293,7 +326,7 @@ final class SettingsViewModel: ObservableObject {
         if name == "新手势" || name.hasPrefix("快捷键 ") { return true }
         var names: Set<String> = [
             "打开 URL", "启动应用", "延时", "窗口操作", "系统视图与空间",
-            "截图与贴图", "离线 OCR", "搜索选中文字"
+            "截图与贴图", "离线 OCR", "搜索选中文字", "排除当前应用"
         ]
         names.formUnion(WindowAction.allCases.map {
             actionName(.init(type: .windowAction, value: $0.rawValue))
@@ -345,6 +378,8 @@ final class SettingsViewModel: ObservableObject {
         case .keyStroke: return "快捷键 \(action.value)"
         case .openURL: return "打开 URL"
         case .launchApplication: return "启动应用"
+        case .openSettings: return "打开 MouseTrails 设置"
+        case .excludeCurrentApplication: return "排除当前应用"
         case .delay: return "延时"
         case .windowAction:
             switch WindowAction(rawValue: action.value) {

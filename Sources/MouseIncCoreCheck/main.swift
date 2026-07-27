@@ -89,7 +89,7 @@ private func runChecks() throws {
 private func runActionContractChecks() throws {
     try check(
         "schema version",
-        AppConfiguration.currentSchemaVersion == 7,
+        AppConfiguration.currentSchemaVersion == 10,
         "System view action configuration must encode the current schema"
     )
     try check(
@@ -120,6 +120,20 @@ private func runActionContractChecks() throws {
         "action sequence validation",
         sequence.validate().isValid,
         "valid delay sequence was rejected"
+    )
+
+    let excluded = AppConfiguration(
+        excludedApplications: [
+            ExcludedApplication(
+                bundleIdentifier: "com.example.Editor",
+                displayName: "Editor"
+            )
+        ]
+    )
+    try check(
+        "excluded application matching",
+        excluded.isApplicationExcluded(bundleIdentifier: "COM.EXAMPLE.EDITOR"),
+        "excluded applications must match bundle identifiers case-insensitively"
     )
 
     let schemaTwoData = Data(

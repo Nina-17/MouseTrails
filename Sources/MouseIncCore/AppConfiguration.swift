@@ -1,12 +1,13 @@
 import Foundation
 
 public struct AppConfiguration: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 7
+    public static let currentSchemaVersion = 10
 
     public let schemaVersion: Int
     public var gestureOptions: GestureOptions
     public var actionSequenceOptions: ActionSequenceOptions
     public var edgeScrollOptions: EdgeScrollOptions
+    public var excludedApplications: [ExcludedApplication]
     public var customGestures: [CustomGestureDefinition]
     public var bindings: [GestureBinding]
 
@@ -21,6 +22,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         trailColor: GestureTrailColor = .orange,
         actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         edgeScrollOptions: EdgeScrollOptions = EdgeScrollOptions(),
+        excludedApplications: [ExcludedApplication] = [],
         customGestures: [CustomGestureDefinition] = [],
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
@@ -37,6 +39,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         )
         self.actionSequenceOptions = actionSequenceOptions
         self.edgeScrollOptions = edgeScrollOptions
+        self.excludedApplications = excludedApplications
         self.customGestures = customGestures
         self.bindings = bindings
     }
@@ -45,6 +48,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         gestureOptions: GestureOptions,
         actionSequenceOptions: ActionSequenceOptions = ActionSequenceOptions(),
         edgeScrollOptions: EdgeScrollOptions = EdgeScrollOptions(),
+        excludedApplications: [ExcludedApplication] = [],
         customGestures: [CustomGestureDefinition] = [],
         bindings: [GestureBinding] = GestureBinding.defaults
     ) {
@@ -52,6 +56,7 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         self.gestureOptions = gestureOptions
         self.actionSequenceOptions = actionSequenceOptions
         self.edgeScrollOptions = edgeScrollOptions
+        self.excludedApplications = excludedApplications
         self.customGestures = customGestures
         self.bindings = bindings
     }
@@ -106,11 +111,19 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         return candidates.first(where: { $0.bundleIdentifiers.isEmpty })
     }
 
+    public func isApplicationExcluded(bundleIdentifier: String?) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return excludedApplications.contains {
+            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case gestureOptions
         case actionSequenceOptions
         case edgeScrollOptions
+        case excludedApplications
         case customGestures
         case bindings
 
@@ -169,6 +182,10 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         ) ?? ActionSequenceOptions()
         edgeScrollOptions = try container.decodeIfPresent(EdgeScrollOptions.self, forKey: .edgeScrollOptions)
             ?? EdgeScrollOptions()
+        excludedApplications = try container.decodeIfPresent(
+            [ExcludedApplication].self,
+            forKey: .excludedApplications
+        ) ?? []
         customGestures = try container.decodeIfPresent(
             [CustomGestureDefinition].self,
             forKey: .customGestures
@@ -204,7 +221,14 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
             let referencedGestures = Set(bindings.map { $0.gesture.uppercased() })
             customGestures.removeAll {
                 gesturesOwningRetiredActions.contains($0.identifier.uppercased())
-                    && !referencedGestures.contains($0.identifier.uppercased())
+                && !referencedGestures.contains($0.identifier.uppercased())
+            }
+        }
+        if storedVersion < 10 {
+            bindings.removeAll { binding in
+                ["LETTER_M", "LETTER_W"].contains {
+                    binding.gesture.caseInsensitiveCompare($0) == .orderedSame
+                }
             }
         }
     }
@@ -215,8 +239,19 @@ public struct AppConfiguration: Codable, Equatable, Sendable {
         try container.encode(gestureOptions, forKey: .gestureOptions)
         try container.encode(actionSequenceOptions, forKey: .actionSequenceOptions)
         try container.encode(edgeScrollOptions, forKey: .edgeScrollOptions)
+        try container.encode(excludedApplications, forKey: .excludedApplications)
         try container.encode(customGestures, forKey: .customGestures)
         try container.encode(bindings, forKey: .bindings)
+    }
+}
+
+public struct ExcludedApplication: Codable, Equatable, Sendable {
+    public var bundleIdentifier: String
+    public var displayName: String
+
+    public init(bundleIdentifier: String, displayName: String) {
+        self.bundleIdentifier = bundleIdentifier
+        self.displayName = displayName
     }
 }
 
@@ -470,6 +505,8 @@ public struct ActionDefinition: Codable, Equatable, Sendable {
         case keyStroke
         case openURL
         case launchApplication
+        case openSettings
+        case excludeCurrentApplication
         case delay
         case windowAction
         case systemViewAction

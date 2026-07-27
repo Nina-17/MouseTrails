@@ -121,7 +121,7 @@ struct ConfigStore {
 
     private func removingRetiredBuiltInLetters(from source: AppConfiguration) -> AppConfiguration {
         var configuration = source
-        let retiredIdentifiers = ["LETTER_S", "LETTER_W"]
+        let retiredIdentifiers = ["LETTER_S", "LETTER_M", "LETTER_W"]
         configuration.bindings.removeAll {
             binding in retiredIdentifiers.contains {
                 binding.gesture.caseInsensitiveCompare($0) == .orderedSame

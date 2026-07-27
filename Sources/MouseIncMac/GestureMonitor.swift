@@ -13,6 +13,7 @@ final class GestureMonitor: NSObject {
     private let logger = Logger(subsystem: "com.mason.mouseincmac", category: "GestureMonitor")
 
     private let configurationProvider: () -> AppConfiguration
+    private let excludedApplicationsProvider: () -> [ExcludedApplication]
     private let overlay: GestureOverlay
     private let executor: ActionExecutor
     private let edgeScrollController: EdgeScrollController
@@ -36,12 +37,16 @@ final class GestureMonitor: NSObject {
 
     init(
         configuration: @escaping () -> AppConfiguration,
+        excludedApplications: (() -> [ExcludedApplication])? = nil,
         overlay: GestureOverlay,
         executor: ActionExecutor,
         edgeScrollController: EdgeScrollController = EdgeScrollController(),
         customGestureRecorder: CustomGestureRecordingController = CustomGestureRecordingController()
     ) {
         configurationProvider = configuration
+        excludedApplicationsProvider = excludedApplications ?? {
+            configuration().excludedApplications
+        }
         self.overlay = overlay
         self.executor = executor
         self.edgeScrollController = edgeScrollController
@@ -134,9 +139,24 @@ final class GestureMonitor: NSObject {
 
         switch type {
         case .scrollWheel:
+            if configuration.edgeScrollOptions.enabled,
+               isCurrentApplicationExcluded() {
+                return Unmanaged.passUnretained(event)
+            }
             handleEdgeScroll(event: event, configuration: configuration, now: now)
             return Unmanaged.passUnretained(event)
         case .rightMouseDown:
+            let inputApplication = NSWorkspace.shared.frontmostApplication
+            let menuApplication = NSWorkspace.shared.menuBarOwningApplication
+            let targetBundleIdentifier = menuApplication?.bundleIdentifier
+                ?? inputApplication?.bundleIdentifier
+            if Self.isApplicationExcluded(
+                targetBundleIdentifier,
+                in: excludedApplicationsProvider()
+            ) {
+                clearSession()
+                return Unmanaged.passUnretained(event)
+            }
             guard options.enabled || customGestureRecorder.isRecording else {
                 clearSession()
                 return Unmanaged.passUnretained(event)
@@ -147,10 +167,6 @@ final class GestureMonitor: NSObject {
                 startDistance: options.startDistance,
                 maximumDuration: options.maximumDuration
             )
-            let inputApplication = NSWorkspace.shared.frontmostApplication
-            let menuApplication = NSWorkspace.shared.menuBarOwningApplication
-            let targetBundleIdentifier = menuApplication?.bundleIdentifier
-                ?? inputApplication?.bundleIdentifier
             if let inputApplication {
                 executionTarget = GestureExecutionTarget(
                     inputProcessIdentifier: inputApplication.processIdentifier,
@@ -458,6 +474,25 @@ final class GestureMonitor: NSObject {
         logger.info("Gesture matched: \(identifier, privacy: .public)")
         DiagnosticLogger.shared.log("Gesture matched: \(identifier); action=\(binding.name)")
         onGesture?("\(identifier) · \(binding.name)")
+    }
+
+    static func isApplicationExcluded(
+        _ bundleIdentifier: String?,
+        in applications: [ExcludedApplication]
+    ) -> Bool {
+        guard let bundleIdentifier else { return false }
+        return applications.contains {
+            $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+        }
+    }
+
+    private func isCurrentApplicationExcluded() -> Bool {
+        let bundleIdentifier = NSWorkspace.shared.menuBarOwningApplication?.bundleIdentifier
+            ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        return Self.isApplicationExcluded(
+            bundleIdentifier,
+            in: excludedApplicationsProvider()
+        )
     }
 
     private func expireActiveSession() {

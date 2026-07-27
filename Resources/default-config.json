@@ -123,6 +123,7 @@
     "inset": 2,
     "step": 0.05
   },
+  "excludedApplications": [],
   "gestureOptions": {
     "enabled": true,
     "maximumDuration": 5,
@@ -138,5 +139,5 @@
       "red": 0
     }
   },
-  "schemaVersion": 7
+  "schemaVersion": 10
 }

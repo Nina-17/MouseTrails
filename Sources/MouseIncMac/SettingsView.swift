@@ -63,6 +63,7 @@ struct SettingsView: View {
         case .general:
             Form {
                 gestureSection
+                excludedApplicationsSection
                 tutorialSection
                 updateSection
                 sequenceSection
@@ -144,6 +145,47 @@ struct SettingsView: View {
                 Text("继续执行").tag(ActionSequenceOptions.FailurePolicy.continueSequence)
             }
             numberField("最大延时（秒）", value: $model.draft.actionSequenceOptions.maximumDelay)
+        }
+    }
+
+    private var excludedApplicationsSection: some View {
+        Section("排除应用") {
+            if model.draft.excludedApplications.isEmpty {
+                Text("暂无。排除后，MouseTrails 会在该应用中完全停用。")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(model.draft.excludedApplications.enumerated()), id: \.element.bundleIdentifier) {
+                    index, application in
+                    LabeledContent {
+                        Button(role: .destructive) {
+                            model.removeExcludedApplication(at: index)
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("从排除名单移除")
+                    } label: {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(application.displayName)
+                                Text(application.bundleIdentifier)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "app.badge")
+                        }
+                    }
+                }
+            }
+            Button {
+                chooseExcludedApplication()
+            } label: {
+                Label("添加应用…", systemImage: "plus.circle")
+            }
+            Text("也可以给任意手势绑定“排除当前应用”动作，触发一次即可快速加入。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -547,6 +589,12 @@ struct SettingsView: View {
             .labelsHidden()
         } else if actionKind(binding: binding, action: action) == .searchSelectedText {
             TextField("搜索 URL 模板", text: actionValueBinding(binding: binding, action: action))
+        } else if actionKind(binding: binding, action: action) == .openSettings {
+            Text("触发后打开 MouseTrails 设置")
+                .foregroundStyle(.secondary)
+        } else if actionKind(binding: binding, action: action) == .excludeCurrentApplication {
+            Text("触发后在当前应用中完全禁用 MouseTrails")
+                .foregroundStyle(.secondary)
         } else {
             let kind = actionKind(binding: binding, action: action)
             TextField(ActionCatalog.descriptor(for: kind).valueDescription,
@@ -772,6 +820,23 @@ struct SettingsView: View {
         }
     }
 
+    private func chooseExcludedApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "选择要排除的应用"
+        panel.prompt = "加入排除名单"
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.allowedContentTypes = [.application]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        if !model.addExcludedApplication(at: url) {
+            let alert = NSAlert()
+            alert.messageText = "无法读取应用标识"
+            alert.informativeText = "请选择包含 Bundle Identifier 的 macOS 应用。"
+            alert.runModal()
+        }
+    }
+
     private func exportConfiguration() {
         let panel = NSSavePanel()
         panel.title = "导出 MouseTrails 配置"
@@ -881,6 +946,8 @@ struct SettingsView: View {
         case .keyStroke: "Command+C"
         case .openURL: "https://"
         case .launchApplication: "com.apple.finder"
+        case .openSettings: ""
+        case .excludeCurrentApplication: ""
         case .delay: "0.2"
         case .windowAction: WindowAction.center.rawValue
         case .systemViewAction: SystemViewAction.missionControl.rawValue

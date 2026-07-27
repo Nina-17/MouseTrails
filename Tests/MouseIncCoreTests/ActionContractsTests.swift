@@ -37,6 +37,35 @@ final class ActionContractsTests: XCTestCase {
         XCTAssertTrue(WindowAction.allCases.contains(.quitApplication))
     }
 
+    func testExcludeCurrentApplicationActionIsSupportedWithoutAValue() {
+        let configuration = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "RIGHT-DOWN",
+                name: "排除当前应用",
+                actions: [.init(type: .excludeCurrentApplication, value: "")]
+            )
+        ])
+
+        XCTAssertTrue(configuration.validate().isValid)
+        XCTAssertEqual(
+            ActionCatalog.descriptor(for: .excludeCurrentApplication).requiredPermissions,
+            []
+        )
+    }
+
+    func testOpenSettingsActionIsSupportedWithoutAValue() {
+        let configuration = AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "打开 MouseTrails 设置",
+                actions: [.init(type: .openSettings, value: "")]
+            )
+        ])
+
+        XCTAssertTrue(configuration.validate().isValid)
+        XCTAssertEqual(ActionCatalog.descriptor(for: .openSettings).requiredPermissions, [])
+    }
+
     func testKeyStrokeParserNormalizesAliasesAndRejectsUnknownTokens() {
         XCTAssertEqual(
             KeyStrokeParser.parse("Cmd+Alt+Shift+C"),

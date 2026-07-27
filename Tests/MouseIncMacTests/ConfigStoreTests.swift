@@ -38,6 +38,8 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertFalse(configuration.bindings.contains {
             $0.gesture.caseInsensitiveCompare("LETTER_S") == .orderedSame
         })
+        XCTAssertNil(configuration.binding(for: "LETTER_M", bundleIdentifier: nil))
+        XCTAssertNil(configuration.binding(for: "LETTER_W", bundleIdentifier: nil))
         XCTAssertFalse(configuration.bindings.contains { binding in
             binding.actions.contains {
                 $0.type == .windowAction && $0.value == WindowAction.quitApplication.rawValue
@@ -83,9 +85,7 @@ final class ConfigStoreTests: XCTestCase {
 
         let loaded = try fixture.store.loadOrCreate()
 
-        XCTAssertFalse(loaded.bindings.contains {
-            $0.gesture.caseInsensitiveCompare("LETTER_W") == .orderedSame
-        })
+        XCTAssertNil(loaded.binding(for: "LETTER_W", bundleIdentifier: nil))
         XCTAssertEqual(
             try JSONDecoder().decode(AppConfiguration.self, from: Data(contentsOf: fixture.fileURL)),
             loaded

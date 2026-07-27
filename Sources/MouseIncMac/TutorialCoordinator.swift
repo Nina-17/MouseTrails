@@ -16,6 +16,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
     case pinnedImage
     case ocr
     case edgeScroll
+    case customization
     case finish
 
     var id: Self { self }
@@ -29,6 +30,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .pinnedImage: return "贴图"
         case .ocr: return "离线 OCR"
         case .edgeScroll: return "边缘滚动"
+        case .customization: return "你的快捷手势"
         case .finish: return "体验完成"
         }
     }
@@ -42,6 +44,7 @@ enum TutorialPage: Int, CaseIterable, Identifiable {
         case .pinnedImage: return "生成贴图并亲手完成全部常用操作"
         case .ocr: return "圈选文字、识别并复制真实结果"
         case .edgeScroll: return "在屏幕左右边缘调整亮度与音量"
+        case .customization: return "录制 M 与 W，让常用功能真正属于你"
         case .finish: return "MouseTrails 已准备就绪"
         }
     }
@@ -54,6 +57,8 @@ private enum TutorialStep: Equatable {
     case back
     case forward
     case trainSearchGesture
+    case trainOpenSettingsGesture
+    case trainExcludeApplicationGesture
     case search
     case closeWindow
     case enterFullScreen
@@ -87,6 +92,57 @@ private enum TutorialStep: Equatable {
         case .recognizeText: return "SQUARE_COUNTERCLOCKWISE"
         default: return nil
         }
+    }
+}
+
+enum TutorialRecordedGestureKind: Hashable {
+    case search
+    case openSettings
+    case excludeCurrentApplication
+
+    var prefix: String {
+        switch self {
+        case .search: return "CUSTOM_TUTORIAL_SEARCH_"
+        case .openSettings: return "CUSTOM_TUTORIAL_OPEN_SETTINGS_"
+        case .excludeCurrentApplication: return "CUSTOM_TUTORIAL_EXCLUDE_APPLICATION_"
+        }
+    }
+
+    var recommendedLetter: String {
+        switch self {
+        case .search: return "S"
+        case .openSettings: return "M"
+        case .excludeCurrentApplication: return "W"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .search: return "搜索选中文字"
+        case .openSettings: return "打开 MouseTrails 设置"
+        case .excludeCurrentApplication: return "排除当前应用"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .search: return "推荐使用字母 S，容易联想到 Search；也可以画任何自己顺手的轨迹。"
+        case .openSettings: return "推荐使用字母 M，方便随时回到 MouseTrails 设置。"
+        case .excludeCurrentApplication: return "推荐使用字母 W；以后在任意前台应用画它，就会把该应用加入全局排除名单。"
+        }
+    }
+
+    func binding(for identifier: String) -> GestureBinding {
+        let action: ActionDefinition
+        switch self {
+        case .search:
+            action = .init(type: .searchSelectedText, value: "https://www.google.com/search?q={query}")
+        case .openSettings:
+            action = .init(type: .openSettings, value: "")
+        case .excludeCurrentApplication:
+            action = .init(type: .excludeCurrentApplication, value: "")
+        }
+        return GestureBinding(gesture: identifier, name: title, actions: [action])
     }
 }
 
@@ -134,7 +190,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         static let completedVersion = "tutorial.completedVersion"
     }
 
-    static let currentTutorialVersion = 4
+    static let currentTutorialVersion = 5
     static let editingSentence = "“人充满劳绩，但诗意地栖居在这块大地之上。” —— 荷尔德林《人，诗意的栖居》"
     static let searchPhrase = "MouseTrails macOS 手势工具"
     static let ocrSample = "MouseTrails 教程识别成功"
@@ -157,6 +213,11 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     var onClose: (@MainActor () -> Void)?
     var dismissPinnedImage: (@MainActor (UUID) -> Void)?
     var persistCustomSearchGesture: (@MainActor (CustomGestureDefinition, GestureBinding) throws -> Void)?
+    var persistTutorialGesture: (@MainActor (
+        CustomGestureDefinition,
+        GestureBinding,
+        TutorialRecordedGestureKind
+    ) throws -> Void)?
 
     private let defaults: UserDefaults
     private let injectedTutorialConfiguration: AppConfiguration?
@@ -171,7 +232,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     private var waitingForSearchReturn = false
     private var pasteboardChangeBeforeAction = 0
     private var searchGestureIdentifier: String?
-    private let searchRecordingTargetID = UUID()
+    private let customGestureRecordingTargetID = UUID()
 
     init(
         defaults: UserDefaults = .standard,
@@ -214,6 +275,12 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     }
 
     var isPreparingCustomSearchGesture: Bool { step == .trainSearchGesture }
+
+    var isPreparingCustomGesture: Bool { recordedGestureKind(for: step) != nil }
+
+    var customGestureTrainingKind: TutorialRecordedGestureKind? {
+        recordedGestureKind(for: step)
+    }
 
     func previewPoints(for identifier: String) -> [CGPoint]? {
         tutorialConfiguration.customGestures.first {
@@ -277,17 +344,21 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     }
 
     func startCustomSearchGestureRecording() {
-        guard step == .trainSearchGesture, !customGestureRecorder.isRecording else { return }
-        let identifier = Self.tutorialSearchGesturePrefix
+        startCustomGestureRecording()
+    }
+
+    func startCustomGestureRecording() {
+        guard let kind = recordedGestureKind(for: step), !customGestureRecorder.isRecording else { return }
+        let identifier = kind.prefix
             + UUID().uuidString.replacingOccurrences(of: "-", with: "")
         feedback = "录制已开始。请按住右键，连续画 3 次相同轨迹"
-        customGestureRecorder.start(targetBindingID: searchRecordingTargetID) { [weak self] samples in
+        customGestureRecorder.start(targetBindingID: customGestureRecordingTargetID) { [weak self] samples in
             guard let self else {
                 return .init(succeeded: false, message: "教程已关闭")
             }
             do {
                 let existing = tutorialConfiguration.customGestures.filter {
-                    !$0.identifier.uppercased().hasPrefix(Self.tutorialSearchGesturePrefix)
+                    !$0.identifier.uppercased().hasPrefix(kind.prefix)
                 }
                 let fixedIdentifiers = Set(tutorialConfiguration.bindings.compactMap { binding -> String? in
                     let value = binding.gesture.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,7 +366,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
                 })
                 let result = try CustomGestureTrainer.train(
                     identifier: identifier,
-                    name: "搜索选中文字",
+                    name: kind.title,
                     rawSamples: samples,
                     existingCustomGestures: existing,
                     fixedGestureIdentifiers: fixedIdentifiers
@@ -306,17 +377,31 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
                         message: "这条轨迹容易与现有手势冲突：\(warning)。请换一种画法重新录制"
                     )
                 }
-                let binding = Self.searchBinding(for: identifier)
-                try persistCustomSearchGesture?(result.definition, binding)
-                tutorialConfiguration = Self.installingSearchGesture(
+                let binding = kind.binding(for: identifier)
+                if let persistTutorialGesture {
+                    try persistTutorialGesture(result.definition, binding, kind)
+                } else if kind == .search {
+                    try persistCustomSearchGesture?(result.definition, binding)
+                }
+                tutorialConfiguration = Self.installingTutorialGesture(
                     result.definition,
                     binding: binding,
+                    kind: kind,
                     in: tutorialConfiguration
                 )
-                searchGestureIdentifier = identifier
-                step = .search
-                emitSuccess("自定义搜索手势已保存")
-                prepareCurrentStep()
+                switch kind {
+                case .search:
+                    searchGestureIdentifier = identifier
+                    step = .search
+                    emitSuccess("自定义搜索手势已保存")
+                    prepareCurrentStep()
+                case .openSettings:
+                    emitSuccess("M 手势已保存")
+                    scheduleStep(.trainExcludeApplicationGesture)
+                case .excludeCurrentApplication:
+                    emitSuccess("W 手势已保存")
+                    scheduleMove(to: .finish)
+                }
                 return .init(
                     succeeded: true,
                     message: "训练完成，相似度 \(Int(result.cohesionScore * 100))%"
@@ -340,7 +425,11 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
     }
 
     func cancelCustomSearchGestureRecording() {
-        guard customGestureRecorder.targetBindingID == searchRecordingTargetID else { return }
+        cancelCustomGestureRecording()
+    }
+
+    func cancelCustomGestureRecording() {
+        guard customGestureRecorder.targetBindingID == customGestureRecordingTargetID else { return }
         customGestureRecorder.cancel()
         feedback = "录制已取消，可以重新开始"
     }
@@ -350,9 +439,18 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         binding: GestureBinding,
         in source: AppConfiguration
     ) -> AppConfiguration {
+        installingTutorialGesture(definition, binding: binding, kind: .search, in: source)
+    }
+
+    static func installingTutorialGesture(
+        _ definition: CustomGestureDefinition,
+        binding: GestureBinding,
+        kind: TutorialRecordedGestureKind,
+        in source: AppConfiguration
+    ) -> AppConfiguration {
         var configuration = source
         let removableIdentifiers = Set(configuration.customGestures.compactMap { gesture in
-            gesture.identifier.uppercased().hasPrefix(tutorialSearchGesturePrefix)
+            gesture.identifier.uppercased().hasPrefix(kind.prefix)
                 ? gesture.identifier.uppercased()
                 : nil
         })
@@ -363,25 +461,14 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         configuration.bindings.removeAll { existing in
             let identifier = existing.gesture.uppercased()
             let isTutorialGesture = removableIdentifiers.contains(identifier)
-                || identifier.hasPrefix(tutorialSearchGesturePrefix)
-            let isLegacySearchGesture = identifier == "LETTER_S"
+                || identifier.hasPrefix(kind.prefix)
+            let isLegacySearchGesture = kind == .search && identifier == "LETTER_S"
                 && existing.actions.contains { $0.type == .searchSelectedText }
             return isTutorialGesture || isLegacySearchGesture
         }
         configuration.customGestures.append(definition)
         configuration.bindings.append(binding)
         return configuration
-    }
-
-    private static func searchBinding(for identifier: String) -> GestureBinding {
-        GestureBinding(
-            gesture: identifier,
-            name: "搜索选中文字",
-            actions: [ActionDefinition(
-                type: .searchSelectedText,
-                value: "https://www.google.com/search?q={query}"
-            )]
-        )
     }
 
     func skipCurrentScene() {
@@ -392,7 +479,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .windows: move(to: .pinnedImage)
         case .pinnedImage: move(to: .ocr)
         case .ocr: move(to: .edgeScroll)
-        case .edgeScroll: move(to: .finish)
+        case .edgeScroll: move(to: .customization)
+        case .customization: move(to: .finish)
         case .finish: break
         }
     }
@@ -406,7 +494,8 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .pinnedImage: move(to: .windows)
         case .ocr: move(to: .pinnedImage)
         case .edgeScroll: move(to: .ocr)
-        case .finish: move(to: .edgeScroll)
+        case .customization: move(to: .edgeScroll)
+        case .finish: move(to: .customization)
         }
     }
 
@@ -690,9 +779,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
 
     private func move(to page: TutorialPage) {
         transitionTask?.cancel()
-        if self.page == .browsing,
-           page != .browsing,
-           customGestureRecorder.targetBindingID == searchRecordingTargetID,
+        if customGestureRecorder.targetBindingID == customGestureRecordingTargetID,
            customGestureRecorder.isRecording {
             customGestureRecorder.cancel()
         }
@@ -709,6 +796,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         case .pinnedImage: step = .createPin
         case .ocr: step = .recognizeText
         case .edgeScroll: step = .edgeScroll
+        case .customization: step = .trainOpenSettingsGesture
         case .finish: step = .finish
         }
         feedback = nil
@@ -734,6 +822,10 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
             feedback = "画一条向右直线回到下一页"
         case .trainSearchGesture:
             feedback = "创建一个属于你的搜索手势；推荐使用容易记忆的字母 S"
+        case .trainOpenSettingsGesture:
+            feedback = "创建一个打开设置的手势；推荐使用字母 M"
+        case .trainExcludeApplicationGesture:
+            feedback = "再创建一个排除当前应用的手势；推荐使用字母 W"
         case .search:
             searchSelectionToken = UUID()
             feedback = "搜索词已选中。画出刚刚录制的自定义手势"
@@ -845,7 +937,7 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
 
     private func finishPresentation() {
         transitionTask?.cancel()
-        if customGestureRecorder.targetBindingID == searchRecordingTargetID,
+        if customGestureRecorder.targetBindingID == customGestureRecordingTargetID,
            customGestureRecorder.isRecording {
             customGestureRecorder.cancel()
         }
@@ -854,6 +946,15 @@ final class TutorialCoordinator: NSWindowController, ObservableObject, NSWindowD
         waitingForSearchReturn = false
         feedback = nil
         onClose?()
+    }
+
+    private func recordedGestureKind(for step: TutorialStep) -> TutorialRecordedGestureKind? {
+        switch step {
+        case .trainSearchGesture: return .search
+        case .trainOpenSettingsGesture: return .openSettings
+        case .trainExcludeApplicationGesture: return .excludeCurrentApplication
+        default: return nil
+        }
     }
 }
 
@@ -1061,6 +1162,7 @@ private struct TutorialView: View {
         case .pinnedImage: pinnedImagePage
         case .ocr: ocrPage
         case .edgeScroll: edgeScrollPage
+        case .customization: customizationPage
         case .finish: finishPage
         }
     }
@@ -1138,7 +1240,7 @@ private struct TutorialView: View {
     private var browsingPage: some View {
         taskLayout {
             if coordinator.isPreparingCustomSearchGesture {
-                customSearchGestureTraining
+                customGestureTraining
             } else if coordinator.expectedGestureIdentifier?.uppercased().hasPrefix("CUSTOM_") == true {
                 TutorialTextField(
                     text: .constant(TutorialCoordinator.searchPhrase),
@@ -1167,18 +1269,25 @@ private struct TutorialView: View {
         }
     }
 
-    private var customSearchGestureTraining: some View {
-        VStack(spacing: 18) {
+    private var customizationPage: some View {
+        taskLayout {
+            customGestureTraining
+        }
+    }
+
+    private var customGestureTraining: some View {
+        let kind = coordinator.customGestureTrainingKind ?? .search
+        return VStack(spacing: 18) {
             HStack(spacing: 18) {
-                Text("S")
+                Text(kind.recommendedLetter)
                     .font(.system(size: 72, weight: .semibold, design: .rounded))
                     .foregroundStyle(.tint)
                     .frame(width: 100, height: 100)
                     .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("创建你的“搜索选中文字”手势")
+                    Text("创建你的“\(kind.title)”手势")
                         .font(.title2.weight(.bold))
-                    Text("推荐使用字母 S，容易联想到 Search；你也可以画任何自己顺手、且与现有手势差异明显的轨迹。")
+                    Text(kind.description)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -1207,9 +1316,9 @@ private struct TutorialView: View {
             HStack(spacing: 12) {
                 Button {
                     if customGestureRecorder.isRecording {
-                        coordinator.cancelCustomSearchGestureRecording()
+                        coordinator.cancelCustomGestureRecording()
                     } else {
-                        coordinator.startCustomSearchGestureRecording()
+                        coordinator.startCustomGestureRecording()
                     }
                 } label: {
                     Label(

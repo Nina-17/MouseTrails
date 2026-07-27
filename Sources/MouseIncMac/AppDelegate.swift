@@ -33,11 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         tutorialCoordinator.onClose = { [weak self] in
             self?.restoreBackgroundActivationPolicy(afterClosing: .tutorial)
         }
-        tutorialCoordinator.persistCustomSearchGesture = { [weak self] definition, binding in
+        tutorialCoordinator.persistTutorialGesture = { [weak self] definition, binding, kind in
             guard let self else { throw CocoaError(.userCancelled) }
-            let updated = TutorialCoordinator.installingSearchGesture(
+            let updated = TutorialCoordinator.installingTutorialGesture(
                 definition,
                 binding: binding,
+                kind: kind,
                 in: self.configuration
             )
             try self.configStore.save(updated)
@@ -45,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.settingsWindowController?.reload(configuration: updated)
             self.updateEnabledMenuItem()
             self.updatePermissionMenus()
-            self.lastGestureItem?.title = "最近手势：自定义搜索手势已保存"
+            self.lastGestureItem?.title = "最近手势：自定义手势已保存"
         }
         launchAtLogin.onStateChange = { [weak self] _ in
             self?.updateLaunchAtLoginMenuItem()
@@ -85,11 +86,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return false }
             guard tutorialCoordinator.configurationForCurrentContext == nil else { return false }
             return captureCoordinator.copySelectedPinnedImage(for: keyStroke)
+        }, openSettingsHandler: { [weak self] in
+            self?.openSettingsFromGesture() ?? false
+        }, excludeCurrentApplicationHandler: { [weak self] target in
+            self?.excludeCurrentApplication(target: target) ?? false
         })
         let monitor = GestureMonitor(
             configuration: { [weak self] in
                 guard let self else { return AppConfiguration() }
                 return tutorialCoordinator.configurationForCurrentContext ?? configuration
+            },
+            excludedApplications: { [weak self] in
+                self?.configuration.excludedApplications ?? []
             },
             overlay: overlay,
             executor: executor,
@@ -411,6 +419,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func excludeCurrentApplication(target: GestureExecutionTarget?) -> Bool {
+        guard let target else { return false }
+        let processIdentifier = target.menuProcessIdentifier ?? target.inputProcessIdentifier
+        let application = NSRunningApplication(processIdentifier: processIdentifier)
+        guard let bundleIdentifier = target.applicationBundleIdentifier
+            ?? application?.bundleIdentifier
+            ?? target.inputBundleIdentifier
+        else {
+            DiagnosticLogger.shared.log("Exclude current application failed: bundle identifier unavailable")
+            return false
+        }
+
+        if configuration.isApplicationExcluded(bundleIdentifier: bundleIdentifier) {
+            return true
+        }
+
+        let displayName = application?.localizedName
+            ?? NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).first?.localizedName
+            ?? bundleIdentifier
+        configuration.excludedApplications.append(
+            ExcludedApplication(
+                bundleIdentifier: bundleIdentifier,
+                displayName: displayName
+            )
+        )
+
+        do {
+            try configStore.save(configuration)
+            settingsWindowController?.reload(configuration: configuration)
+            DiagnosticLogger.shared.log(
+                "Application excluded globally; bundleIdentifier=\(bundleIdentifier)"
+            )
+            lastGestureItem?.title = "最近手势：已排除 \(displayName)"
+            return true
+        } catch {
+            configuration.excludedApplications.removeAll {
+                $0.bundleIdentifier.caseInsensitiveCompare(bundleIdentifier) == .orderedSame
+            }
+            DiagnosticLogger.shared.log(
+                "Exclude current application failed to save; bundleIdentifier=\(bundleIdentifier)"
+            )
+            presentError(title: "无法排除应用", message: error.localizedDescription)
+            return false
+        }
+    }
+
     private func startMonitor() {
         guard AccessibilityPermission.isGranted else {
             updatePermissionMenus()
@@ -496,6 +550,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func openSettings() {
         showSettings(page: nil)
+    }
+
+    private func openSettingsFromGesture() -> Bool {
+        openSettings()
+        return true
     }
 
     private func showSettings(page: SettingsPage?) {

@@ -152,6 +152,54 @@ final class TutorialCoordinatorTests: XCTestCase {
         XCTAssertNil(installed.binding(for: "LETTER_S", bundleIdentifier: nil))
     }
 
+    func testTutorialRecordsMAndWIntoTheRealConfiguration() async throws {
+        let (coordinator, defaults, suiteName) = try makeCoordinator()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var persisted = AppConfiguration(bindings: [])
+        coordinator.persistTutorialGesture = { definition, binding, kind in
+            persisted = TutorialCoordinator.installingTutorialGesture(
+                definition,
+                binding: binding,
+                kind: kind,
+                in: persisted
+            )
+        }
+
+        coordinator.begin()
+        for _ in 0 ..< 7 { coordinator.skipCurrentScene() }
+        XCTAssertEqual(coordinator.page, .customization)
+        XCTAssertEqual(coordinator.customGestureTrainingKind, .openSettings)
+
+        coordinator.startCustomGestureRecording()
+        let m = [
+            CGPoint(x: 0, y: 0), CGPoint(x: 25, y: 90), CGPoint(x: 50, y: 8),
+            CGPoint(x: 75, y: 90), CGPoint(x: 100, y: 0)
+        ]
+        for _ in 0 ..< 3 { XCTAssertTrue(coordinator.customGestureRecorder.consume(points: m)) }
+        try await Task.sleep(for: .milliseconds(800))
+
+        XCTAssertEqual(coordinator.customGestureTrainingKind, .excludeCurrentApplication)
+        coordinator.startCustomGestureRecording()
+        let w = [
+            CGPoint(x: 0, y: 90), CGPoint(x: 25, y: 0), CGPoint(x: 50, y: 82),
+            CGPoint(x: 75, y: 0), CGPoint(x: 100, y: 90)
+        ]
+        for _ in 0 ..< 3 { XCTAssertTrue(coordinator.customGestureRecorder.consume(points: w)) }
+        try await Task.sleep(for: .milliseconds(800))
+
+        XCTAssertEqual(coordinator.page, .finish)
+        XCTAssertEqual(persisted.customGestures.count, 2)
+        XCTAssertTrue(persisted.bindings.contains {
+            $0.actions == [.init(type: .openSettings, value: "")]
+        })
+        XCTAssertTrue(persisted.bindings.contains {
+            $0.actions == [.init(type: .excludeCurrentApplication, value: "")]
+        })
+        XCTAssertFalse(persisted.bindings.contains {
+            $0.gesture == "LETTER_M" || $0.gesture == "LETTER_W"
+        })
+    }
+
     func testTutorialConfigurationIsTemporaryAndExcludesQuitApplication() throws {
         var source = AppConfiguration()
         source.edgeScrollOptions.enabled = true

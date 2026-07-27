@@ -180,6 +180,47 @@ final class AppConfigurationTests: XCTestCase {
         XCTAssertEqual(object["schemaVersion"] as? Int, AppConfiguration.currentSchemaVersion)
     }
 
+    func testSchemaSevenMigratesWithEmptyExcludedApplications() throws {
+        let data = Data(
+            #"{"schemaVersion":7,"gestureOptions":{},"bindings":[]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
+        XCTAssertTrue(configuration.excludedApplications.isEmpty)
+    }
+
+    func testSchemaNineRemovesRetiredBuiltInLetterBindings() throws {
+        let data = Data(
+            #"{"schemaVersion":9,"gestureOptions":{},"bindings":[{"gesture":"LETTER_M","name":"设置","bundleIdentifiers":[],"actions":[{"type":"openSettings","value":""}]},{"gesture":"LETTER_W","name":"排除","bundleIdentifiers":[],"actions":[{"type":"excludeCurrentApplication","value":""}]}]}"#.utf8
+        )
+
+        let configuration = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(configuration.schemaVersion, AppConfiguration.currentSchemaVersion)
+        XCTAssertNil(configuration.binding(for: "LETTER_M", bundleIdentifier: nil))
+        XCTAssertNil(configuration.binding(for: "LETTER_W", bundleIdentifier: nil))
+    }
+
+    func testExcludedApplicationsRoundTripAndMatchCaseInsensitively() throws {
+        let excluded = ExcludedApplication(
+            bundleIdentifier: "com.example.Editor",
+            displayName: "Editor"
+        )
+        let configuration = AppConfiguration(excludedApplications: [excluded])
+
+        let decoded = try JSONDecoder().decode(
+            AppConfiguration.self,
+            from: JSONEncoder().encode(configuration)
+        )
+
+        XCTAssertEqual(decoded.excludedApplications, [excluded])
+        XCTAssertTrue(decoded.isApplicationExcluded(bundleIdentifier: "COM.EXAMPLE.EDITOR"))
+        XCTAssertFalse(decoded.isApplicationExcluded(bundleIdentifier: "com.example.Browser"))
+        XCTAssertFalse(decoded.isApplicationExcluded(bundleIdentifier: nil))
+    }
+
     func testCustomGesturesRoundTripInSchemaFive() throws {
         let samples = Array(repeating: [
             GestureSamplePoint(x: -0.5, y: -0.5),

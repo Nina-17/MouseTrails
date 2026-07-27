@@ -64,6 +64,25 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(model.draft.bindings[0].name, "保存截图")
     }
 
+    func testOpenSettingsActionImmediatelyNamesNewGesture() {
+        let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
+            GestureBinding(
+                gesture: "UP",
+                name: "新手势",
+                actions: [.init(type: .keyStroke, value: "Command+C")]
+            )
+        ])) { _ in }
+
+        model.setActionType(
+            .openSettings,
+            value: "",
+            actionIndex: 0,
+            bindingIndex: 0
+        )
+
+        XCTAssertEqual(model.draft.bindings[0].name, "打开 MouseTrails 设置")
+    }
+
     func testChangingActionValueReplacesDefaultName() {
         let model = SettingsViewModel(configuration: AppConfiguration(bindings: [
             GestureBinding(
@@ -249,5 +268,23 @@ final class SettingsViewModelTests: XCTestCase {
 
         XCTAssertTrue(model.useApplication(at: finderURL, for: 0))
         XCTAssertEqual(model.draft.bindings[0].bundleIdentifiers, ["com.apple.finder"])
+    }
+
+    func testExcludedApplicationCanBeAddedAndRemoved() throws {
+        let model = SettingsViewModel(configuration: AppConfiguration()) { _ in }
+        let finderURL = URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app")
+        try XCTSkipUnless(FileManager.default.fileExists(atPath: finderURL.path))
+
+        XCTAssertTrue(model.addExcludedApplication(at: finderURL))
+        XCTAssertEqual(model.draft.excludedApplications.count, 1)
+        XCTAssertEqual(
+            model.draft.excludedApplications.first?.bundleIdentifier,
+            "com.apple.finder"
+        )
+        XCTAssertTrue(model.addExcludedApplication(at: finderURL))
+        XCTAssertEqual(model.draft.excludedApplications.count, 1)
+
+        model.removeExcludedApplication(at: 0)
+        XCTAssertTrue(model.draft.excludedApplications.isEmpty)
     }
 }

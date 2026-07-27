@@ -164,6 +164,18 @@ public enum ActionCatalog {
                 displayName: "启动应用",
                 valueDescription: "Bundle ID 或应用绝对路径"
             )
+        case .openSettings:
+            ActionDescriptor(
+                kind: .openSettings,
+                displayName: "打开 MouseTrails 设置",
+                valueDescription: "不需要参数"
+            )
+        case .excludeCurrentApplication:
+            ActionDescriptor(
+                kind: .excludeCurrentApplication,
+                displayName: "排除当前应用",
+                valueDescription: "触发后在当前应用中完全禁用 MouseTrails"
+            )
         case .delay:
             ActionDescriptor(
                 kind: .delay,

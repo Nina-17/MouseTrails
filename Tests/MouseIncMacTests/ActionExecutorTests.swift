@@ -103,6 +103,50 @@ final class ActionExecutorTests: XCTestCase {
         XCTAssertFalse(executor.isExecuting)
     }
 
+    func testExcludeCurrentApplicationUsesStableGestureTarget() async throws {
+        let target = GestureExecutionTarget(
+            inputProcessIdentifier: 123,
+            menuProcessIdentifier: 456,
+            inputBundleIdentifier: "com.example.helper",
+            applicationBundleIdentifier: "com.example.application",
+            gestureStartPoint: CGPoint(x: 10, y: 20)
+        )
+        var receivedTarget: GestureExecutionTarget?
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            excludeCurrentApplicationHandler: {
+                receivedTarget = $0
+                return true
+            }
+        )
+
+        executor.execute(
+            [.init(type: .excludeCurrentApplication, value: "")],
+            context: .init(target: target)
+        )
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(receivedTarget, target)
+        XCTAssertFalse(executor.isExecuting)
+    }
+
+    func testOpenSettingsUsesInjectedHandler() async throws {
+        var callCount = 0
+        let executor = ActionExecutor(
+            eventLogger: { _, _ in },
+            openSettingsHandler: {
+                callCount += 1
+                return true
+            }
+        )
+
+        executor.execute([.init(type: .openSettings, value: "")])
+        try await Task.sleep(nanoseconds: 20_000_000)
+
+        XCTAssertEqual(callCount, 1)
+        XCTAssertFalse(executor.isExecuting)
+    }
+
     func testSystemViewActionUsesInjectedHandler() async throws {
         var receivedAction: SystemViewAction?
         var loggedEvents: [(DiagnosticEvent, [String: String])] = []
