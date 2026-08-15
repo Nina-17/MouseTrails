@@ -64,17 +64,32 @@ jobs:
           mkdir -p /tmp/sparkle-tools
           tar -xJf /tmp/Sparkle-2.9.4.tar.xz -C /tmp/sparkle-tools --strip-components=1
 
+      - name: Stage published archive for appcast
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPCAST_ARCHIVES: ${{ runner.temp }}/appcast-archives
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
+          mkdir -p "$APPCAST_ARCHIVES"
+          gh release download "${GITHUB_REF_NAME}" \
+            --pattern "MouseTrails-${version}.dmg" \
+            --dir "$APPCAST_ARCHIVES"
+          test -f "$APPCAST_ARCHIVES/MouseTrails-${version}.dmg"
+
       - name: Generate signed Sparkle appcast
         shell: bash
         env:
           SPARKLE_ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY }}
+          APPCAST_ARCHIVES: ${{ runner.temp }}/appcast-archives
         run: |
           test -n "$SPARKLE_ED25519_PRIVATE_KEY"
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)
           ./scripts/generate-appcast.sh \
-            dist \
+            "$APPCAST_ARCHIVES" \
             /tmp/sparkle-tools/bin/generate_appcast \
             "https://github.com/Nina-17/MouseTrails/releases/download/v${version}/"
+          cp "$APPCAST_ARCHIVES/appcast.xml" dist/appcast.xml
 
       - name: Publish appcast to GitHub Pages branch
         shell: bash
