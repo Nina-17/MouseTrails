@@ -3,6 +3,32 @@ import XCTest
 @testable import MouseIncMac
 
 final class AccessibilityWindowActionsTests: XCTestCase {
+    func testCommandWSelectsCloseTabEvenWhenCloseWindowAppearsFirst() {
+        let command = NativeWindowMenuCommand.closeWindowOrTab
+        let menuItems: [(title: String, modifiers: UInt32)] = [
+            ("Close Window", 1), // Command-Shift-W, as in Chromium browsers.
+            ("Close Window", 2), // Command-Option-W, as in Safari.
+            ("Close Tab", 0)
+        ]
+        let selected = menuItems.first {
+            command.matches(title: $0.title, virtualKey: 13, modifiers: $0.modifiers, isEnabled: true)
+        }
+        XCTAssertEqual(selected?.title, "Close Tab")
+    }
+
+    func testCommandWMatchesLocalizedMenuShortcutsWithoutRelyingOnTitles() {
+        let command = NativeWindowMenuCommand.closeWindowOrTab
+        for title in ["Close Tab", "关闭标签页", "關閉標籤頁", "タブを閉じる", "Close"] {
+            XCTAssertTrue(command.matches(title: title, virtualKey: 13, modifiers: 0, isEnabled: true))
+        }
+        XCTAssertTrue(command.matches(title: "Close Window", virtualKey: 13, modifiers: 0, isEnabled: true))
+        XCTAssertFalse(command.matches(title: "Close Tab", virtualKey: nil, modifiers: nil, isEnabled: true))
+        XCTAssertFalse(command.matches(title: "Close Tab", virtualKey: 13, modifiers: 0, isEnabled: false))
+        XCTAssertFalse(command.matches(title: "Close Tab", virtualKey: 12, modifiers: 0, isEnabled: true))
+        XCTAssertFalse(command.matches(title: "Close All Tabs", virtualKey: 13, modifiers: 3, isEnabled: true))
+        XCTAssertFalse(command.matches(title: "Close Tab", virtualKey: 13, modifiers: 8, isEnabled: true))
+    }
+
     func testCloseAllTerminatesSafariAndChrome() {
         XCTAssertEqual(
             CloseAllWindowStrategy.forBundleIdentifier("com.apple.Safari"),

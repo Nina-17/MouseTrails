@@ -49,6 +49,20 @@ struct NativeWindowMenuCommand: Equatable {
     let modifiers: UInt32
     let titles: [String]
 
+    // Match the app's Command-W command, regardless of menu language or order.
+    // A browser's Close Window command can appear before Close Tab, but uses
+    // additional modifiers and must never be selected for this shortcut.
+    static let closeWindowOrTab = Self(virtualKey: 13, modifiers: 0, titles: [])
+
+    func matches(title: String?, virtualKey: Int?, modifiers: UInt32?, isEnabled: Bool?) -> Bool {
+        guard isEnabled != false else { return false }
+        let matchesTitle = title.map(titles.contains) ?? false
+        let matchesShortcut = self.virtualKey.map {
+            virtualKey == $0 && modifiers == self.modifiers
+        } ?? false
+        return matchesTitle || matchesShortcut
+    }
+
     static func forAction(_ action: WindowAction) -> Self? {
         // AX menu shortcut modifiers omit the Fn/Globe key. Native window
         // commands are exposed as Control + NoCommand plus their virtual key.
@@ -276,12 +290,9 @@ enum AccessibilityWindowActions {
         let application = menuApplication(for: target) ?? inputApplication
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
         AXUIElementSetMessagingTimeout(applicationElement, 0.3)
-        let closeTitles = ["Close Tab", "Close Window", "Close", "关闭标签页", "关闭窗口", "关闭"]
-        let closeIdentifiers = ["closeTab:", "performClose:", "close:"]
         let menuClosed = elementAttribute(kAXMenuBarAttribute, from: applicationElement).flatMap {
             findMenuItem(
-                titles: closeTitles,
-                identifiers: closeIdentifiers,
+                matching: .closeWindowOrTab,
                 in: $0,
                 depth: 0
             )
@@ -293,14 +304,17 @@ enum AccessibilityWindowActions {
             FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
             return true
         }
-        if let window, pressWindowButton(kAXCloseButtonAttribute, on: window) {
+        // Only Steam's split-process compatibility path uses a window button.
+        // A red close button would close every tab in an ordinary browser.
+        if usesLogicalHideFallback(target: target),
+           let window, pressWindowButton(kAXCloseButtonAttribute, on: window) {
             FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
             return true
         }
         if hideLogicalApplicationFallback(target: target, snapshot: snapshot) {
             return true
         }
-        guard postCommandW() else { return false }
+        guard postCommandW(to: inputApplication.processIdentifier) else { return false }
         FocusHandoffCoordinator.scheduleIfNeeded(snapshot)
         return true
     }
@@ -346,16 +360,12 @@ enum AccessibilityWindowActions {
         depth: Int
     ) -> AXUIElement? {
         guard depth <= 8 else { return nil }
-        let title = stringAttribute(kAXTitleAttribute, from: element)
-        let matchesTitle = title.map(command.titles.contains) ?? false
-        let matchesShortcut = command.virtualKey.map { virtualKey in
-            numberAttribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)?.intValue
-                == virtualKey &&
-            numberAttribute(kAXMenuItemCmdModifiersAttribute, from: element)?.uint32Value
-                == command.modifiers
-        } ?? false
-        if (matchesTitle || matchesShortcut),
-           booleanAttribute(kAXEnabledAttribute, from: element) != false {
+        if command.matches(
+            title: stringAttribute(kAXTitleAttribute, from: element),
+            virtualKey: numberAttribute(kAXMenuItemCmdVirtualKeyAttribute, from: element)?.intValue,
+            modifiers: numberAttribute(kAXMenuItemCmdModifiersAttribute, from: element)?.uint32Value,
+            isEnabled: booleanAttribute(kAXEnabledAttribute, from: element)
+        ) {
             return element
         }
         for child in elementArrayAttribute(kAXChildrenAttribute, from: element) {
@@ -532,7 +542,7 @@ enum AccessibilityWindowActions {
         return true
     }
 
-    private static func postCommandW() -> Bool {
+    private static func postCommandW(to processIdentifier: pid_t) -> Bool {
         let source = CGEventSource(stateID: .hidSystemState)
         guard
             let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 13, keyDown: true),
@@ -540,8 +550,8 @@ enum AccessibilityWindowActions {
         else { return false }
         keyDown.flags = [.maskCommand]
         keyUp.flags = [.maskCommand]
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        keyDown.postToPid(processIdentifier)
+        keyUp.postToPid(processIdentifier)
         return true
     }
 
